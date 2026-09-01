@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>UnifiedAudio</value>
+  </data>
+  <data name="CurrentProfile" xml:space="preserve">
+    <value>Current profile: {0}</value>
+  </data>
+  <data name="CustomProfile" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="CreateFirstTitle" xml:space="preserve">
+    <value>Create your first audio profile</value>
+  </data>
+  <data name="CreateFirstBody" xml:space="preserve">
+    <value>Choose the speakers and microphone you want to use together.</value>
+  </data>
+  <data name="CreateProfile" xml:space="preserve">
+    <value>Create profile</value>
+  </data>
+  <data name="AddProfile" xml:space="preserve">
+    <value>Add profile</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>Refresh devices</value>
+  </data>
+  <data name="Activate" xml:space="preserve">
+    <value>Use this profile</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="NotConnected" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="Output" xml:space="preserve">
+    <value>Output</value>
+  </data>
+  <data name="Input" xml:space="preserve">
+    <value>Input</value>
+  </data>
+  <data name="WindowsOutput" xml:space="preserve">
+    <value>Windows output for this profile</value>
+  </data>
+  <data name="WindowsInput" xml:space="preserve">
+    <value>Windows input for this profile</value>
+  </data>
+  <data name="GlobalPhysicalInput" xml:space="preserve">
+    <value>Global physical input</value>
+  </data>
+  <data name="OutputWithGlobalInput" xml:space="preserve">
+    <value>Output: {0} · global physical input</value>
+  </data>
+  <data name="MissingOutput" xml:space="preserve">
+    <value>Choose an output.</value>
+  </data>
+  <data name="MissingInput" xml:space="preserve">
+    <value>Choose a Windows input.</value>
+  </data>
+  <data name="InputUnchanged" xml:space="preserve">
+    <value>Windows input unchanged; the global physical input is used.</value>
+  </data>
+  <data name="ConfigureGlobalInput" xml:space="preserve">
+    <value>Configure global physical input</value>
+  </data>
+  <data name="LegacyInputNotice" xml:space="preserve">
+    <value>This profile preserves its legacy Windows input and capture roles. They remain unchanged; edit them in Advanced only if you need to override the global policy.</value>
+  </data>
+  <data name="PhysicalInputRequired" xml:space="preserve">
+    <value>Choose an available physical capture device for this profile override.</value>
+  </data>
+  <data name="Shortcut" xml:space="preserve">
+    <value>Keyboard shortcut</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Icon" xml:space="preserve">
+    <value>Icon</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ClearShortcut" xml:space="preserve">
+    <value>Clear shortcut</value>
+  </data>
+  <data name="PressShortcut" xml:space="preserve">
+    <value>Press the keys you want to use</value>
+  </data>
+  <data name="NoShortcut" xml:space="preserve">
+    <value>No shortcut</value>
+  </data>
+  <data name="DeleteTitle" xml:space="preserve">
+    <value>Delete this profile?</value>
+  </data>
+  <data name="DeleteBody" xml:space="preserve">
+    <value>"{0}" will be removed. This cannot be undone.</value>
+  </data>
+  <data name="Theme" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="StartWithWindows" xml:space="preserve">
+    <value>Start UnifiedAudio with Windows</value>
+  </data>
+  <data name="KeepBackground" xml:space="preserve">
+    <value>Keep running in background when window is closed</value>
+  </data>
+  <data name="ShowNotifications" xml:space="preserve">
+    <value>Show notifications when switching profiles</value>
+  </data>
+  <data name="Advanced" xml:space="preserve">
+    <value>Advanced</value>
+  </data>
+  <data name="AdvancedHelp" xml:space="preserve">
+    <value>Most people can leave this off. When it is off, a profile uses the same speakers and microphone for every Windows audio role.</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="AboutBody" xml:space="preserve">
+    <value>UnifiedAudio changes your Windows speakers and microphone with one click. Version {0}. Made by </value>
+  </data>
+  <data name="AboutBodyPrefix" xml:space="preserve">
+    <value>UnifiedAudio changes your Windows speakers and microphone with one click. Version {0}. Made by </value>
+  </data>
+  <data name="AboutBodySuffix" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="CheckForUpdates" xml:space="preserve">
+    <value>Check for updates</value>
+  </data>
+  <data name="UpdateChecking" xml:space="preserve">
+    <value>Checking GitHub for a newer version...</value>
+  </data>
+  <data name="UpdateUpToDate" xml:space="preserve">
+    <value>You already have the latest version ({0}).</value>
+  </data>
+  <data name="UpdateAvailableTitle" xml:space="preserve">
+    <value>Install this update?</value>
+  </data>
+  <data name="UpdateAvailableBody" xml:space="preserve">
+    <value>Version {1} is available. You have {0}. UnifiedAudio will close, replace itself, and reopen.</value>
+  </data>
+  <data name="InstallUpdate" xml:space="preserve">
+    <value>Download and install</value>
+  </data>
+  <data name="UpdateCancelled" xml:space="preserve">
+    <value>Update cancelled.</value>
+  </data>
+  <data name="UpdateDownloading" xml:space="preserve">
+    <value>Downloading the new installer...</value>
+  </data>
+  <data name="UpdateDownloadingPercent" xml:space="preserve">
+    <value>Downloading the new installer... {0}%</value>
+  </data>
+  <data name="UpdateInstalling" xml:space="preserve">
+    <value>Starting the installer. UnifiedAudio will close and reopen.</value>
+  </data>
+  <data name="UpdateFailed" xml:space="preserve">
+    <value>The update could not be checked or downloaded. Try again later.</value>
+  </data>
+  <data name="UpdateMissingInstaller" xml:space="preserve">
+    <value>A newer version was found, but its installer is missing on GitHub.</value>
+  </data>
+  <data name="UpdateInvalidRelease" xml:space="preserve">
+    <value>GitHub returned a release that UnifiedAudio could not read.</value>
+  </data>
+  <data name="UpdateGithubError" xml:space="preserve">
+    <value>GitHub could not be reached right now. Try again later.</value>
+  </data>
+  <data name="OpenLogs" xml:space="preserve">
+    <value>Open log folder</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="ActivatedTitle" xml:space="preserve">
+    <value>{0} activated</value>
+  </data>
+  <data name="PartialTitle" xml:space="preserve">
+    <value>{0} partially activated</value>
+  </data>
+  <data name="FailedTitle" xml:space="preserve">
+    <value>{0} couldn't be fully activated</value>
+  </data>
+  <data name="OutputLine" xml:space="preserve">
+    <value>Output: {0}</value>
+  </data>
+  <data name="InputLine" xml:space="preserve">
+    <value>Input: {0}</value>
+  </data>
+  <data name="DeviceUnavailable" xml:space="preserve">
+    <value>{0} is not connected</value>
+  </data>
+  <data name="NoPlaybackDevices" xml:space="preserve">
+    <value>No speakers are available right now.</value>
+  </data>
+  <data name="NoCaptureDevices" xml:space="preserve">
+    <value>No microphones are available right now.</value>
+  </data>
+  <data name="ShortcutInUse" xml:space="preserve">
+    <value>That shortcut is already in use. Choose another one.</value>
+  </data>
+  <data name="ShortcutInvalid" xml:space="preserve">
+    <value>That shortcut can't be used. Try Control or Alt plus another key.</value>
+  </data>
+  <data name="MissingName" xml:space="preserve">
+    <value>Give this profile a name.</value>
+  </data>
+  <data name="MissingDevices" xml:space="preserve">
+    <value>Choose speakers and a microphone.</value>
+  </data>
+  <data name="IconDesktop" xml:space="preserve">
+    <value>Desktop</value>
+  </data>
+  <data name="IconSofa" xml:space="preserve">
+    <value>Sofa</value>
+  </data>
+  <data name="IconTv" xml:space="preserve">
+    <value>TV</value>
+  </data>
+  <data name="IconSpeaker" xml:space="preserve">
+    <value>Speaker</value>
+  </data>
+  <data name="IconHeadphones" xml:space="preserve">
+    <value>Headphones</value>
+  </data>
+  <data name="IconVr" xml:space="preserve">
+    <value>VR</value>
+  </data>
+  <data name="EditProfile" xml:space="preserve">
+    <value>Edit profile</value>
+  </data>
+  <data name="NewProfile" xml:space="preserve">
+    <value>New profile</value>
+  </data>
+  <data name="Profiles" xml:space="preserve">
+    <value>Profiles</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+</root>

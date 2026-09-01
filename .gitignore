@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/build/
+**/build-*/
+.vs/
+.vscode/
+artifacts/
+dist/
+installer/payload/
+upstream/
+*.user
+*.suo
+*.VC.db
+*.opendb
+TestResults/

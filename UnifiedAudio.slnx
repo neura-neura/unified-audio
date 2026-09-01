@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/UnifiedAudio.Core/UnifiedAudio.Core.csproj" />
+    <Project Path="src/UnifiedAudio.App/UnifiedAudio.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UnifiedAudio.Core.Tests/UnifiedAudio.Core.Tests.csproj" />
+  </Folder>
+</Solution>

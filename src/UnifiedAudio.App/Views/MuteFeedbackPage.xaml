@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="UnifiedAudio.Views.MuteFeedbackPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded">
+    <ScrollViewer>
+        <StackPanel Padding="{StaticResource PagePadding}" Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TitleText" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock Text="El gate interno está después de VST3 y antes de la mezcla. Al asentarse, escribe cero digital exacto aunque un plugin tenga cola." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+            </StackPanel>
+            <InfoBar x:Name="StatusBar" IsClosable="False" IsOpen="False" />
+
+            <Border Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="MuteStateText" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="MuteDetailText" Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="MuteSwitch" Grid.Column="1" Toggled="MuteSwitch_Toggled" AutomationProperties.Name="Mute del micrófono" />
+                </Grid>
+            </Border>
+
+            <Border Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Endpoints externos del perfil" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="ExternalMuteStateText" Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </Border>
+
+            <Expander Header="Hotkey global" IsExpanded="True">
+                <StackPanel Spacing="8">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="8">
+                            <TextBox x:Name="MuteHotkeyBox" Header="Hotkey principal" IsReadOnly="True" KeyDown="MainMuteHotkeyBox_KeyDown" />
+                            <Button x:Name="CaptureMouseButton" Content="Capturar siguiente botón del mouse" Click="CaptureMouseButton_Click" HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Bottom">
+                            <Button Content="Restaurar NumpadPgDn" Click="RestoreDefaultMainMuteHotkeyButton_Click" />
+                            <Button Content="Limpiar" Click="ClearMainMuteHotkeyButton_Click" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="Valor inicial físico: NumpadPgDn (VK_NEXT, scan 0x51, no extendida). El campo también acepta botones derecho, central, X1 y X2 del mouse." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                    <ComboBox x:Name="MuteHotkeyModeBox" Header="Comportamiento" HorizontalAlignment="Stretch" SelectionChanged="MuteHotkeyModeBox_SelectionChanged" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <NumberBox x:Name="ReleaseDelayBox" Header="Retardo de liberación (ms)" Minimum="0" Maximum="5000" ValueChanged="ReleaseDelayBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                        <NumberBox x:Name="HybridHoldBox" Grid.Column="1" Header="Umbral híbrido (ms)" Minimum="50" Maximum="5000" ValueChanged="HybridHoldBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    </Grid>
+                    <ToggleSwitch x:Name="PassthroughSwitch" Header="Passthrough: la aplicación activa también recibe la tecla" Toggled="PassthroughSwitch_Toggled" />
+                    <ToggleSwitch x:Name="WildcardSwitch" Header="Wildcard: permitir modificadores adicionales" Toggled="MainHotkeyOption_Changed" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <ComboBox x:Name="ControlSideBox" Header="Lado de Ctrl" DisplayMemberPath="Label" SelectionChanged="MainHotkeyOption_Changed" />
+                        <ComboBox x:Name="AltSideBox" Grid.Column="1" Header="Lado de Alt" DisplayMemberPath="Label" SelectionChanged="MainHotkeyOption_Changed" />
+                        <ComboBox x:Name="ShiftSideBox" Grid.Column="2" Header="Lado de Shift" DisplayMemberPath="Label" SelectionChanged="MainHotkeyOption_Changed" />
+                    </Grid>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="MuteOnlyHotkeyBox" Header="Hotkey separada para mutear" IsReadOnly="True" KeyDown="StateHotkeyBox_KeyDown" />
+                        <Button Grid.Column="1" Content="Limpiar" Tag="Mute" Click="ClearStateHotkeyButton_Click" VerticalAlignment="Bottom" />
+                    </Grid>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="UnmuteOnlyHotkeyBox" Header="Hotkey separada para desmutear" IsReadOnly="True" KeyDown="StateHotkeyBox_KeyDown" />
+                        <Button Grid.Column="1" Content="Limpiar" Tag="Unmute" Click="ClearStateHotkeyButton_Click" VerticalAlignment="Bottom" />
+                    </Grid>
+                    <TextBlock Text="Las hotkeys separadas usan combinaciones globales de Windows y comprueban conflictos con los perfiles. NumpadPgDn permanece como tecla física para Toggle/PTT/PTM/Híbrido." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+            <Expander Header="Feedback, OSD y overlay" IsExpanded="True">
+                <StackPanel Spacing="10">
+                    <ToggleSwitch x:Name="FeedbackSoundsSwitch" Header="Sonidos distintos al mutear y desmutear" Toggled="FeedbackSetting_Toggled" />
+                    <ComboBox x:Name="FeedbackOutputBox" Header="Dispositivo para sonidos de feedback" DisplayMemberPath="Label" HorizontalAlignment="Stretch" SelectionChanged="FeedbackOutputBox_SelectionChanged" />
+                    <Grid ColumnSpacing="8" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="160" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="MuteSoundPathBox" Header="WAV personalizado: mute" PlaceholderText="Vacío = sonido integrado" TextChanged="SoundPathBox_TextChanged" />
+                        <Button Grid.Column="1" Tag="Mute" Content="Elegir WAV" MinHeight="44" Click="ChooseSoundPathButton_Click" AutomationProperties.Name="Elegir WAV de mute" />
+                        <Button Grid.Column="2" Tag="Mute" Content="Limpiar" MinHeight="44" Click="ClearSoundPathButton_Click" AutomationProperties.Name="Limpiar WAV de mute" />
+                        <NumberBox x:Name="MuteSoundVolumeBox" Grid.Column="3" Header="Volumen mute (%)" Minimum="0" Maximum="100" ValueChanged="SoundVolumeBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+
+                        <TextBox x:Name="UnmuteSoundPathBox" Grid.Row="1" Header="WAV personalizado: unmute" PlaceholderText="Vacío = sonido integrado" TextChanged="SoundPathBox_TextChanged" />
+                        <Button Grid.Row="1" Grid.Column="1" Tag="Unmute" Content="Elegir WAV" MinHeight="44" Click="ChooseSoundPathButton_Click" AutomationProperties.Name="Elegir WAV de unmute" />
+                        <Button Grid.Row="1" Grid.Column="2" Tag="Unmute" Content="Limpiar" MinHeight="44" Click="ClearSoundPathButton_Click" AutomationProperties.Name="Limpiar WAV de unmute" />
+                        <NumberBox x:Name="UnmuteSoundVolumeBox" Grid.Row="1" Grid.Column="3" Header="Volumen unmute (%)" Minimum="0" Maximum="100" ValueChanged="SoundVolumeBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+
+                        <TextBox x:Name="PttOnSoundPathBox" Grid.Row="2" Header="WAV personalizado: PTT on" PlaceholderText="Vacío = sonido integrado" TextChanged="SoundPathBox_TextChanged" />
+                        <Button Grid.Row="2" Grid.Column="1" Tag="PttOn" Content="Elegir WAV" MinHeight="44" Click="ChooseSoundPathButton_Click" AutomationProperties.Name="Elegir WAV de PTT activado" />
+                        <Button Grid.Row="2" Grid.Column="2" Tag="PttOn" Content="Limpiar" MinHeight="44" Click="ClearSoundPathButton_Click" AutomationProperties.Name="Limpiar WAV de PTT activado" />
+                        <NumberBox x:Name="PttOnSoundVolumeBox" Grid.Row="2" Grid.Column="3" Header="Volumen PTT on (%)" Minimum="0" Maximum="100" ValueChanged="SoundVolumeBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+
+                        <TextBox x:Name="PttOffSoundPathBox" Grid.Row="3" Header="WAV personalizado: PTT off" PlaceholderText="Vacío = sonido integrado" TextChanged="SoundPathBox_TextChanged" />
+                        <Button Grid.Row="3" Grid.Column="1" Tag="PttOff" Content="Elegir WAV" MinHeight="44" Click="ChooseSoundPathButton_Click" AutomationProperties.Name="Elegir WAV de PTT desactivado" />
+                        <Button Grid.Row="3" Grid.Column="2" Tag="PttOff" Content="Limpiar" MinHeight="44" Click="ClearSoundPathButton_Click" AutomationProperties.Name="Limpiar WAV de PTT desactivado" />
+                        <NumberBox x:Name="PttOffSoundVolumeBox" Grid.Row="3" Grid.Column="3" Header="Volumen PTT off (%)" Minimum="0" Maximum="100" ValueChanged="SoundVolumeBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    </Grid>
+                    <ToggleSwitch x:Name="OsdSwitch" Header="Mostrar OSD temporal sin robar foco" Toggled="FeedbackSetting_Toggled" />
+                    <ToggleSwitch x:Name="ExcludeFullscreenOsdSwitch" Header="No mostrar OSD sobre aplicaciones fullscreen" Toggled="FeedbackSetting_Toggled" />
+                    <NumberBox x:Name="OsdDurationBox" Header="Duración del OSD (ms)" Minimum="250" Maximum="10000" ValueChanged="OsdDurationBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    <ComboBox x:Name="OsdPositionBox" Header="Posición del OSD" SelectionChanged="OsdPositionBox_SelectionChanged" />
+                    <ComboBox x:Name="OsdMonitorBox" Header="Monitor del OSD" DisplayMemberPath="Label" SelectionChanged="OsdMonitorBox_SelectionChanged" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="MutedOsdTextBox" Header="Texto muteado" TextChanged="OsdTextBox_TextChanged" />
+                        <TextBox x:Name="UnmutedOsdTextBox" Grid.Column="1" Header="Texto desmuteado" TextChanged="OsdTextBox_TextChanged" />
+                    </Grid>
+                    <Expander Header="Colores de estado" IsExpanded="False">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock Text="OSD muteado" Style="{StaticResource FieldLabelStyle}" /><ColorPicker x:Name="MutedOsdColorPicker" IsAlphaEnabled="False" ColorChanged="StateColorPicker_ColorChanged" /></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="OSD activo" Style="{StaticResource FieldLabelStyle}" /><ColorPicker x:Name="UnmutedOsdColorPicker" IsAlphaEnabled="False" ColorChanged="StateColorPicker_ColorChanged" /></StackPanel>
+                            </Grid>
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock Text="Overlay muteado" Style="{StaticResource FieldLabelStyle}" /><ColorPicker x:Name="OverlayMutedColorPicker" IsAlphaEnabled="False" ColorChanged="StateColorPicker_ColorChanged" /></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="Overlay inactivo" Style="{StaticResource FieldLabelStyle}" /><ColorPicker x:Name="OverlayIdleColorPicker" IsAlphaEnabled="False" ColorChanged="StateColorPicker_ColorChanged" /></StackPanel>
+                            </Grid>
+                            <StackPanel><TextBlock Text="Overlay hablando" Style="{StaticResource FieldLabelStyle}" /><ColorPicker x:Name="OverlaySpeakingColorPicker" IsAlphaEnabled="False" ColorChanged="StateColorPicker_ColorChanged" /></StackPanel>
+                            <TextBlock Text="El overlay visible es sólo un círculo relleno; su estado también queda disponible para accesibilidad." Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Expander>
+                    <ToggleSwitch x:Name="OverlaySwitch" Header="Overlay always-on-top (bloqueado y click-through)" Toggled="FeedbackSetting_Toggled" />
+                    <Button x:Name="LocateOverlayButton" Content="Localizar y mostrar overlay ahora" MinHeight="44" Click="LocateOverlayButton_Click" HorizontalAlignment="Left" AutomationProperties.Name="Localizar y mostrar overlay ahora" />
+                    <ToggleSwitch x:Name="OverlayLockedSwitch" Header="Bloquear overlay y hacerlo click-through" Toggled="FeedbackSetting_Toggled" />
+                    <ComboBox x:Name="OverlayVisibilityBox" Header="Cuándo mostrar el overlay" SelectionChanged="OverlayVisibilityBox_SelectionChanged" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="OverlayToggleHotkeyBox" Header="Hotkey mostrar/ocultar overlay" IsReadOnly="True" KeyDown="OverlayHotkeyBox_KeyDown" />
+                        <Button Grid.Column="1" Content="Limpiar" Tag="Toggle" Click="ClearOverlayHotkeyButton_Click" VerticalAlignment="Bottom" />
+                    </Grid>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="OverlayLockHotkeyBox" Header="Hotkey bloquear/desbloquear overlay" IsReadOnly="True" KeyDown="OverlayHotkeyBox_KeyDown" />
+                        <Button Grid.Column="1" Content="Limpiar" Tag="Lock" Click="ClearOverlayHotkeyButton_Click" VerticalAlignment="Bottom" />
+                    </Grid>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <NumberBox x:Name="OverlayScaleBox" Header="Escala (%)" Minimum="50" Maximum="300" ValueChanged="OverlayPlacementBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                        <NumberBox x:Name="OverlayXBox" Grid.Column="1" Header="Posición X relativa (%)" Minimum="0" Maximum="100" ValueChanged="OverlayPlacementBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                        <NumberBox x:Name="OverlayYBox" Grid.Column="2" Header="Posición Y relativa (%)" Minimum="0" Maximum="100" ValueChanged="OverlayPlacementBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    </Grid>
+                    <NumberBox x:Name="OverlayOpacityBox" Header="Opacidad del overlay (%)" Minimum="10" Maximum="100" ValueChanged="OverlayOpacityBox_ValueChanged" SpinButtonPlacementMode="Compact" AutomationProperties.Name="Opacidad del overlay (%)" />
+                    <NumberBox x:Name="ActivityThresholdBox" Header="Umbral de actividad (dBFS)" Minimum="-80" Maximum="0" ValueChanged="ActivityThresholdBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    <TextBlock Text="Al desbloquear, el círculo puede moverse o redimensionarse. X/Y guardan una posición relativa resistente a cambios de DPI; fuera del círculo no se pinta ningún fondo." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

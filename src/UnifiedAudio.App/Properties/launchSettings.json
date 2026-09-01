@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "UnifiedAudio (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "UnifiedAudio (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

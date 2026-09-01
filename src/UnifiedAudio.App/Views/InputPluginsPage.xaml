@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="UnifiedAudio.Views.InputPluginsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="Page_Loaded">
+    <ScrollViewer>
+        <StackPanel Padding="{StaticResource PagePadding}" Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TitleText" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock Text="Selecciona los endpoints que abre el motor, controla el periodo WASAPI y administra el escaneo VST3 sin bloquear la interfaz." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+            </StackPanel>
+            <InfoBar x:Name="StatusBar" IsClosable="False" IsOpen="False" />
+
+            <Grid ColumnSpacing="12" RowSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ComboBox x:Name="InputBox" Header="Entrada física global del motor" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="OutputBox" Grid.Column="1" Header="Salida virtual final" HorizontalAlignment="Stretch" />
+                <ToggleSwitch x:Name="FollowGlobalInputSwitch" Grid.Row="1" Header="Seguir el micrófono físico predeterminado; si Windows apunta a un cable se usa esta entrada como respaldo" />
+                <CheckBox x:Name="PreserveMixerOnStartCheckBox" Grid.Row="2" Content="Conservar la mezcla de PC al iniciar (elección explícita; se bloquea si Windows Listen crea un loop)" />
+                <NumberBox x:Name="BufferBox" Grid.Row="3" Header="Buffer solicitado (0 = Auto)" Minimum="0" Maximum="4096" SmallChange="16" Value="0" SpinButtonPlacementMode="Compact" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="RefreshButton" Click="RefreshButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE72C;" /><TextBlock x:Name="RefreshButtonText" /></StackPanel>
+                </Button>
+                <Button x:Name="StartStopButton" Style="{StaticResource AccentButtonStyle}" Click="StartStopButton_Click" />
+            </StackPanel>
+
+            <Expander Header="VST3" IsExpanded="True">
+                <StackPanel Spacing="12">
+                    <TextBlock x:Name="PluginSummary" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="ScanButton" Click="ScanButton_Click" Tag="scan.start" />
+                        <Button x:Name="RescanButton" Click="ScanButton_Click" Tag="scan.rescan" />
+                        <Button x:Name="RetryButton" Click="ScanButton_Click" Tag="scan.retry" />
+                        <Button x:Name="SkipButton" Click="ScanButton_Click" Tag="scan.skip" Content="Omitir actual" />
+                    </StackPanel>
+                    <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <TextBlock Text="Catálogo" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBox x:Name="PluginSearchBox" PlaceholderText="Buscar por plugin o fabricante" TextChanged="PluginSearchBox_TextChanged" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <ComboBox x:Name="CatalogBox" DisplayMemberPath="DisplayName" HorizontalAlignment="Stretch" AutomationProperties.Name="Plugin disponible" />
+                        <Button x:Name="AddPluginButton" Grid.Column="1" Content="Añadir" Click="AddPluginButton_Click" />
+                    </Grid>
+                    <TextBlock Text="Cadena activa" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <ListView x:Name="ChainList" DisplayMemberPath="DisplayName" SelectionMode="Single" MinHeight="96" AutomationProperties.Name="Cadena VST3" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Subir" Click="MoveUpButton_Click" />
+                        <Button Content="Bajar" Click="MoveDownButton_Click" />
+                        <Button Content="Bypass / activar" Click="BypassButton_Click" />
+                        <Button Content="Abrir editor" Click="OpenEditorButton_Click" />
+                        <Button Content="Quitar" Click="RemovePluginButton_Click" />
+                    </StackPanel>
+                    <TextBlock Text="Carpetas VST3 adicionales" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <ListView x:Name="PluginFoldersList" SelectionMode="Single" MaxHeight="128" AutomationProperties.Name="Carpetas VST3 adicionales" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Añadir carpeta" Click="AddFolderButton_Click" />
+                        <Button Content="Quitar carpeta" Click="RemoveFolderButton_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

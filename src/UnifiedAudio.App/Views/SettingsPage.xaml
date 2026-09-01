@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="UnifiedAudio.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer>
+        <StackPanel MaxWidth="760" Padding="{StaticResource PagePadding}" Spacing="16">
+            <TextBlock x:Name="TitleText" Style="{StaticResource PageTitleStyle}" />
+
+            <TextBlock x:Name="ThemeLabel" FontWeight="SemiBold" />
+            <ComboBox x:Name="ThemeBox" MinWidth="220" SelectionChanged="ThemeBox_SelectionChanged" />
+            <TextBlock x:Name="LanguageLabel" FontWeight="SemiBold" />
+            <ComboBox x:Name="LanguageBox" MinWidth="220" SelectionChanged="LanguageBox_SelectionChanged" />
+            <TextBlock x:Name="LanguageRestartText" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+            <ToggleSwitch x:Name="StartupSwitch" Toggled="StartupSwitch_Toggled" />
+            <ToggleSwitch x:Name="BackgroundSwitch" Toggled="BackgroundSwitch_Toggled" />
+            <ToggleSwitch x:Name="RestoreDefaultsSwitch" Toggled="RestoreDefaultsSwitch_Toggled" />
+            <ToggleSwitch x:Name="LaunchMinimizedSwitch" Toggled="LaunchMinimizedSwitch_Toggled" />
+            <ToggleSwitch x:Name="NotificationSwitch" Toggled="NotificationSwitch_Toggled" />
+            <ComboBox x:Name="DefaultProfileBox" HorizontalAlignment="Stretch" SelectionChanged="DefaultProfileBox_SelectionChanged" />
+
+            <Expander Header="Política de arranque del motor" IsExpanded="False">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Solo se aplica cuando Windows inicia UnifiedAudio. La demora y la espera de proceso son modos mutuamente excluyentes." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                    <ComboBox x:Name="StartupGateBox" Header="Antes de abrir el motor" HorizontalAlignment="Stretch" SelectionChanged="StartupGateBox_SelectionChanged" />
+                    <NumberBox x:Name="StartupDelayBox" Header="Demora (segundos)" Minimum="0" Maximum="300" ValueChanged="StartupPolicy_ValueChanged" SpinButtonPlacementMode="Compact" Visibility="Collapsed" />
+                    <StackPanel x:Name="StartupProcessPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBox x:Name="StartupProcessBox" Header="Proceso" PlaceholderText="discord.exe" TextChanged="StartupProcessBox_TextChanged" />
+                        <NumberBox x:Name="StartupTimeoutBox" Header="Timeout (segundos)" Minimum="1" Maximum="180" ValueChanged="StartupPolicy_ValueChanged" SpinButtonPlacementMode="Compact" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="AdvancedExpander" IsExpanded="False">
+                <StackPanel Spacing="12">
+                    <TextBlock x:Name="AdvancedHelp" Style="{StaticResource SectionBodyStyle}" />
+                    <ToggleSwitch x:Name="AdvancedLoggingSwitch" Toggled="AdvancedLoggingSwitch_Toggled" />
+                    <TextBlock x:Name="AdvancedRolesHint" Style="{StaticResource SectionBodyStyle}" />
+                    <ComboBox x:Name="AdvancedProfileBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedProfileBox_SelectionChanged" />
+                    <ToggleSwitch x:Name="AdvancedRolesSwitch" Toggled="AdvancedRolesSwitch_Toggled" />
+                    <StackPanel x:Name="AdvancedRolesPanel" Spacing="12" Visibility="Collapsed">
+                        <TextBlock x:Name="OutputConsoleLabel" FontWeight="SemiBold" />
+                        <ComboBox x:Name="OutputConsoleBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                        <TextBlock x:Name="OutputMultimediaLabel" FontWeight="SemiBold" />
+                        <ComboBox x:Name="OutputMultimediaBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                        <TextBlock x:Name="OutputCommunicationsLabel" FontWeight="SemiBold" />
+                        <ComboBox x:Name="OutputCommunicationsBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                        <StackPanel x:Name="AdvancedInputRolesPanel" Spacing="8">
+                            <TextBlock x:Name="InputConsoleLabel" FontWeight="SemiBold" />
+                            <ComboBox x:Name="InputConsoleBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                            <TextBlock x:Name="InputMultimediaLabel" FontWeight="SemiBold" />
+                            <ComboBox x:Name="InputMultimediaBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                            <TextBlock x:Name="InputCommunicationsLabel" FontWeight="SemiBold" />
+                            <ComboBox x:Name="InputCommunicationsBox" HorizontalAlignment="Stretch" SelectionChanged="AdvancedRoleBox_SelectionChanged" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button x:Name="OpenAdvancedProfileButton" Click="OpenAdvancedProfileButton_Click" />
+                    <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock x:Name="FactoryResetTitle" FontWeight="SemiBold" />
+                        <TextBlock x:Name="FactoryResetHelp" Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                        <Button x:Name="FactoryResetButton" HorizontalAlignment="Left" Click="FactoryResetButton_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            <Expander Header="Importar configuraciones anteriores" IsExpanded="False">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="UnifiedAudio detecta archivos de Audio Profiles, Mic Mix, AHK_MicMute y MicVST. Primero muestra un preview; nunca modifica ni elimina el archivo fuente." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                    <ComboBox x:Name="ImportSourceBox" Header="Configuración detectada" HorizontalAlignment="Stretch" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Volver a detectar" Click="RefreshImportsButton_Click" />
+                        <Button Content="Previsualizar e importar" Style="{StaticResource AccentButtonStyle}" Click="ImportButton_Click" />
+                    </StackPanel>
+                    <InfoBar x:Name="ImportStatus" IsClosable="False" IsOpen="False" />
+                </StackPanel>
+            </Expander>
+
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="AboutTitle" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock x:Name="AboutBody" Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="UpdateButton" Click="UpdateButton_Click" />
+                    <Button x:Name="LogsButton" Click="LogsButton_Click" />
+                </StackPanel>
+                <TextBlock x:Name="UpdateStatus" Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
+                <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed" IsIndeterminate="True" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
