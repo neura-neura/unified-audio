@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -44,6 +44,9 @@ public static class UiLocalizer
             case ComboBox comboBox:
                 comboBox.Header = LocalizeObject(comboBox.Header);
                 comboBox.PlaceholderText = LiteralCatalog.Get(comboBox.PlaceholderText);
+                break;
+            case RadioButtons radioButtons:
+                radioButtons.Header = LocalizeObject(radioButtons.Header);
                 break;
             case Slider slider:
                 slider.Header = LocalizeObject(slider.Header);

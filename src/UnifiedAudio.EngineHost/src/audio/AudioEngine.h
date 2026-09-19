@@ -141,6 +141,7 @@ public:
 
     UnifiedAudioDeviceManager&      getDeviceManager() { return inventoryManager; }
     double                          getGraphSampleRate() const { return graphSampleRate.load(); }
+    int                             getGraphBlockSize() const { return graphBlockSize.load(); }
     double                          getCaptureSampleRate() const { return captureSampleRate.load(); }
     std::uint64_t                   getUnderrunCount() const { return audioBridge.underruns(); }
     std::uint64_t                   getOverrunCount() const { return audioBridge.overruns(); }

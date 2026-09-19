@@ -15,6 +15,19 @@ public static class Program
     private static void Main(string[] args)
     {
         LaunchArgs = args;
+        if (args.Any(a => string.Equals(a, "--mixer-self-test", StringComparison.OrdinalIgnoreCase)))
+        {
+            NativeMethods.AttachConsole(NativeMethods.AttachParentProcess);
+            NativeMethods.CoInitializeEx(0, NativeMethods.CoInitApartmentThreaded);
+            Environment.ExitCode = MixerSelfTest.RunAsync().GetAwaiter().GetResult() ? 0 : 1;
+            return;
+        }
+        if (args.Any(a => string.Equals(a, "--overlay-self-test", StringComparison.OrdinalIgnoreCase)))
+        {
+            NativeMethods.AttachConsole(NativeMethods.AttachParentProcess);
+            Environment.ExitCode = OverlaySelfTest.Run() ? 0 : 1;
+            return;
+        }
         if (args.Any(a => string.Equals(a, "--self-test", StringComparison.OrdinalIgnoreCase)))
         {
             NativeMethods.AttachConsole(NativeMethods.AttachParentProcess);

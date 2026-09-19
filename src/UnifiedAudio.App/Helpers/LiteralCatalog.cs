@@ -1,4 +1,4 @@
-using UnifiedAudio.Models;
+﻿using UnifiedAudio.Models;
 
 namespace UnifiedAudio.Helpers;
 
@@ -7,6 +7,15 @@ public static class LiteralCatalog
     private static readonly IReadOnlyDictionary<string, (string English, string Chinese)> Values =
         new Dictionary<string, (string, string)>(StringComparer.Ordinal)
         {
+            ["No disponible"] = ("Unavailable", "不可用"),
+            ["No hay un dispositivo predeterminado disponible."] = ("No default device is available.", "没有可用的默认设备。"),
+            ["Selecciona un plugin de la cadena activa."] = ("Select a plug-in in the active chain.", "请选择活动链中的插件。"),
+            ["Voz procesada"] = ("Processed microphone", "处理后的麦克风"),
+            ["Salida final"] = ("Final output", "最终输出"),
+            ["−60 dB · Silencio"] = ("−60 dB · Quiet", "−60 dB · 安静"),
+            ["0 dB · Límite"] = ("0 dB · Limit", "0 dB · 上限"),
+            ["Los cambios se aplican automáticamente. Voz: micrófono procesado. PC: salida seleccionada. Final: audio enviado al micrófono virtual."] = ("Changes apply automatically. Voice: processed microphone. PC: selected playback device. Final: audio sent to the virtual microphone.", "更改自动应用。语音：处理后的麦克风。电脑：所选播放设备。最终：发送到虚拟麦克风的音频。"),
+            ["No se pudo aplicar la mezcla"] = ("Could not apply the mix", "无法应用混音"),
             ["Cambiar también la entrada predeterminada de Windows para este perfil"] = ("Also change the Windows default input for this profile", "同时更改此配置的 Windows 默认输入"),
             ["Entrada predeterminada de Windows por perfil"] = ("Per-profile Windows default input", "每个配置的 Windows 默认输入"),
             ["Entrada física global"] = ("Global physical input", "全局物理输入"),
@@ -218,6 +227,9 @@ public static class LiteralCatalog
             ["WAV personalizado: PTT off"] = ("Custom WAV: PTT off", "自定义 WAV：PTT 关闭"),
             ["WAV personalizado: PTT on"] = ("Custom WAV: PTT on", "自定义 WAV：PTT 开启"),
             ["WAV personalizado: unmute"] = ("Custom WAV: unmute", "自定义 WAV：取消静音"),
+            ["Ruta de feedback"] = ("Feedback route", "反馈路径"),
+            ["Protección"] = ("Protection", "保护"),
+            ["Al desbloquear, el círculo puede moverse o redimensionarse. X/Y guardan una posición relativa resistente a cambios de DPI; fuera del círculo no se pinta ningún fondo."] = ("Unlock to move or resize the circle. X/Y save its relative position across display scaling changes. The area outside the circle is transparent.", "解锁后可移动或调整圆圈大小。X/Y 保存相对位置以适应显示缩放变化。圆圈外区域透明。"),
             ["Predeterminado de Windows"] = ("Windows default", "Windows 默认设备"),
             ["Entrada → VST3 → Mute → Mezcla → Salida virtual. Cada tarjeta refleja el estado que reporta el motor."] = ("Input → VST3 → Mute → Mix → Virtual output. Each card reflects the state reported by the engine.", "输入 → VST3 → 静音 → 混音 → 虚拟输出。每张卡片都反映引擎报告的真实状态。"),
             ["Solo las marcadas"] = ("Only checked applications", "仅勾选的应用"),
@@ -355,12 +367,9 @@ public static class LiteralCatalog
 
     public static string Get(string? source)
     {
-        if (string.IsNullOrWhiteSpace(source) || Loc.Language == AppLanguage.Spanish) return source ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(source) || Loc.EffectiveLanguage == AppLanguage.Spanish) return source ?? string.Empty;
         if (!Values.TryGetValue(source, out var value)) return source;
-        var language = Loc.Language == AppLanguage.System
-            ? System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.ToLowerInvariant()
-            : string.Empty;
-        var chinese = Loc.Language == AppLanguage.SimplifiedChinese || language == "zh";
+        var chinese = Loc.EffectiveLanguage == AppLanguage.SimplifiedChinese;
         return chinese ? value.Chinese : value.English;
     }
 }

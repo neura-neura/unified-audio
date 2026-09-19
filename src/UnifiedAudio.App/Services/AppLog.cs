@@ -1,10 +1,10 @@
-using System.Text;
+﻿using System.Text;
 
 namespace UnifiedAudio.Services;
 
 public sealed class AppLog
 {
-    private readonly object _sync = new();
+    private readonly UnifiedAudio.Core.Persistence.BoundedLogFile _writer;
     private readonly string _directory;
     private readonly string _filePath;
 
@@ -16,6 +16,7 @@ public sealed class AppLog
             "logs");
         Directory.CreateDirectory(_directory);
         _filePath = Path.Combine(_directory, "unified-audio.log");
+        _writer = new(_filePath);
     }
 
     public string DirectoryPath => _directory;
@@ -51,10 +52,7 @@ public sealed class AppLog
                 builder.Append(" | ").Append(exception);
             }
 
-            lock (_sync)
-            {
-                File.AppendAllText(_filePath, builder + Environment.NewLine, Encoding.UTF8);
-            }
+            _writer.Append(builder.ToString());
         }
         catch
         {

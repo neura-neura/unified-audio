@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using UnifiedAudio.Models;
 
 namespace UnifiedAudio.Helpers;
@@ -7,16 +7,18 @@ public static class Loc
 {
     public static AppLanguage Language { get; set; } = AppLanguage.System;
 
+    public static AppLanguage EffectiveLanguage => Language == AppLanguage.System
+        ? CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.ToLowerInvariant() switch
+        {
+            "es" => AppLanguage.Spanish,
+            "zh" => AppLanguage.SimplifiedChinese,
+            _ => AppLanguage.English
+        }
+        : Language;
+
     public static string Get(string key)
     {
-        var selected = Language == AppLanguage.System
-            ? CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.ToLowerInvariant() switch
-            {
-                "es" => AppLanguage.Spanish,
-                "zh" => AppLanguage.SimplifiedChinese,
-                _ => AppLanguage.English
-            }
-            : Language;
+        var selected = EffectiveLanguage;
         var table = selected switch
         {
             AppLanguage.Spanish => StringCatalog.Spanish,

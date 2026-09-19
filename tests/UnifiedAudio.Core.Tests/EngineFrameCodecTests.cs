@@ -5,6 +5,28 @@ namespace UnifiedAudio.Core.Tests;
 
 public sealed class EngineFrameCodecTests
 {
+    private sealed record Rule(string Key, string DisplayName, float Gain, bool Excluded);
+    private sealed record Plugin(string Id, bool Bypassed, string StateBase64);
+
+    [Fact]
+    public void NestedRulesAndPluginsUseTheNativeCaseSensitiveContract()
+    {
+        var payload = EngineFrameCodec.SerializePayload(new
+        {
+            mode = "Both",
+            rules = new[] { new Rule("C:\\Player.exe", "Player", 0.75f, false) },
+            plugins = new[] { new Plugin("rnnoise", true, "YWJj") }
+        });
+        var decoded = EngineFrameCodec.Decode(EngineFrameCodec.Encode(new EngineMessage { Payload = payload }));
+        var rule = decoded.Payload.GetProperty("rules")[0];
+        Assert.Equal("C:\\Player.exe", rule.GetProperty("key").GetString());
+        Assert.Equal(0.75f, rule.GetProperty("gain").GetSingle());
+        Assert.False(rule.GetProperty("excluded").GetBoolean());
+        var plugin = decoded.Payload.GetProperty("plugins")[0];
+        Assert.Equal("rnnoise", plugin.GetProperty("id").GetString());
+        Assert.True(plugin.GetProperty("bypassed").GetBoolean());
+        Assert.Equal("YWJj", plugin.GetProperty("stateBase64").GetString());
+    }
     [Fact]
     public void RoundTripPreservesEnvelope()
     {

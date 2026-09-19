@@ -161,8 +161,15 @@ void PluginChain::rebuildConnections()
     auto channelsOf = [this] (NodeID id) -> NodeChannels
     {
         if (auto* n = graph.getNodeForId (id))
-            return { id, n->getProcessor()->getTotalNumInputChannels(),
-                         n->getProcessor()->getTotalNumOutputChannels() };
+        {
+            auto* processor = n->getProcessor();
+            // Graph I/O nodes expose the graph channels, while plugins may
+            // also expose enabled sidechain buses. Route only the main bus;
+            // auxiliary inputs are not part of the serial voice signal.
+            if (id == inputNode || id == outputNode)
+                return { id, processor->getTotalNumInputChannels(), processor->getTotalNumOutputChannels() };
+            return { id, processor->getMainBusNumInputChannels(), processor->getMainBusNumOutputChannels() };
+        }
         return { id, 0, 0 };
     };
 

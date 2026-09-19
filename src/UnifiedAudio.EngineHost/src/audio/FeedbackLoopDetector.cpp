@@ -54,7 +54,6 @@ constexpr GUID listenSettingsGuid
     { 0x24DBB0FC, 0x9311, 0x4B3D, { 0x9C, 0xF0, 0x18, 0xFF, 0x15, 0x56, 0x39, 0xD4 } };
 constexpr DWORD listenCheckboxPropertyId = 1;
 constexpr DWORD listenTargetPropertyId = 0;
-constexpr DWORD listenTargetPropertyIdFallback = 2;
 
 bool isPropertyMissing (HRESULT hr)
 {
@@ -109,6 +108,8 @@ ListenBool readListenBool (IPropertyStore* store)
     ListenBool result { ListenBool::State::unknown, false };
     switch (value.vt)
     {
+        case VT_EMPTY:
+        case VT_NULL: result = { ListenBool::State::missing, false }; break;
         case VT_BOOL: result = { ListenBool::State::value, value.boolVal != VARIANT_FALSE }; break;
         case VT_UI1: result = { ListenBool::State::value, value.bVal != 0 }; break;
         case VT_UI2: result = { ListenBool::State::value, value.uiVal != 0 }; break;
@@ -137,8 +138,7 @@ ListenTarget readListenTarget (IPropertyStore* store, bool& probeFailed)
     }
 
     const PROPERTYKEY keys[] = {
-        { listenSettingsGuid, listenTargetPropertyId },
-        { listenSettingsGuid, listenTargetPropertyIdFallback }
+        { listenSettingsGuid, listenTargetPropertyId }
     };
     for (const auto& key : keys)
     {
@@ -158,12 +158,12 @@ ListenTarget readListenTarget (IPropertyStore* store, bool& probeFailed)
         else if (value.vt == VT_LPWSTR && value.pwszVal != nullptr)
         {
             result.id = juce::String (value.pwszVal);
-            result.usesDefault = false;
+            result.usesDefault = result.id.isEmpty();
         }
         else if (value.vt == VT_BSTR && value.bstrVal != nullptr)
         {
             result.id = juce::String (value.bstrVal);
-            result.usesDefault = false;
+            result.usesDefault = result.id.isEmpty();
         }
         else
             probeFailed = true;

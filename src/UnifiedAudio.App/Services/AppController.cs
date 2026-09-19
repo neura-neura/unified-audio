@@ -1,4 +1,4 @@
-using UnifiedAudio.Helpers;
+﻿using UnifiedAudio.Helpers;
 using UnifiedAudio.Models;
 using Microsoft.UI.Dispatching;
 using System.Diagnostics;
@@ -111,6 +111,7 @@ public sealed class AppController : IDisposable
         try
         {
             await Engine.ConnectAsync();
+            await RefreshDefaultRoutingAsync();
             var active = State.Profiles.FirstOrDefault(profile => profile.Id == Settings.LastActivatedProfileId);
             if (active is not null)
             {
@@ -263,7 +264,41 @@ public sealed class AppController : IDisposable
     {
         RefreshFromHardware();
         ScheduleHardwareRecovery();
+        _ = RefreshDefaultRoutingAsync();
     });
+
+    private bool _defaultRoutingBusy;
+    private async Task RefreshDefaultRoutingAsync()
+    {
+        if (_defaultRoutingBusy || !Engine.IsConnected) return;
+        _defaultRoutingBusy = true;
+        try
+        {
+            var snapshot = await Engine.GetSnapshotAsync();
+            if (!snapshot.Running) return;
+            var input = Settings.GlobalInputMode == GlobalInputMode.FollowWindowsDefault
+                ? Audio.GetDevices(AudioFlow.Recording).FirstOrDefault(d => d.IsDefaultMultimedia) : null;
+            var output = Settings.FinalOutputFollowsDefault
+                ? Audio.GetDevices(AudioFlow.Playback).FirstOrDefault(d => d.IsDefaultMultimedia) : null;
+            var system = Settings.SystemAudioFollowsDefault
+                ? Audio.GetDevices(AudioFlow.Playback).FirstOrDefault(d => d.IsDefaultMultimedia) : null;
+            EngineDeviceConfiguration? devices = null;
+            if ((input is not null && input.Id != snapshot.InputDeviceId)
+                || (output is not null && output.Id != snapshot.OutputDeviceId))
+                devices = new(input?.Name ?? snapshot.InputDeviceName, output?.Name ?? snapshot.OutputDeviceName,
+                    snapshot.BufferSize, input?.Id ?? snapshot.InputDeviceId, output?.Id ?? snapshot.OutputDeviceId);
+            EngineMixerConfiguration? mixer = null;
+            if (system is not null && system.Id != snapshot.SystemCaptureDeviceId)
+                mixer = new((EngineMixerMode)snapshot.MixerMode, system.Name, system.Id,
+                    snapshot.VoiceGain, snapshot.SystemGain, snapshot.DuckingEnabled, snapshot.DuckAmount,
+                    snapshot.DuckThresholdDb, snapshot.DuckAttackMs, snapshot.DuckHoldMs, snapshot.DuckReleaseMs,
+                    snapshot.ProcessFilterEnabled, snapshot.ProcessFilterExclusionMode, snapshot.ProcessRules.ToArray());
+            if (devices is not null || mixer is not null)
+                await Engine.ConfigurePipelineAsync(devices, mixer, null, null);
+        }
+        catch (Exception ex) { Log.Warn($"Default device routing: {ex.Message}"); }
+        finally { _defaultRoutingBusy = false; }
+    }
 
     private void ScheduleHardwareRecovery()
     {

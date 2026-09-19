@@ -1,6 +1,7 @@
-#include <juce_gui_basics/juce_gui_basics.h>
+﻿#include <juce_gui_basics/juce_gui_basics.h>
 #include "audio/AudioEngine.h"
 #include "state/Persistence.h"
+#include "BoundedLogger.h"
 
 #if JUCE_WINDOWS
  #define WIN32_LEAN_AND_MEAN
@@ -239,6 +240,12 @@ public:
         centreWithSize (juce::jmax (editor->getWidth(), 420),
                         juce::jmax (editor->getHeight(), 260));
         setVisible (true);
+#if JUCE_WINDOWS
+        // The headless host is launched with STARTF_USESHOWWINDOW/SW_HIDE.
+        // Explicitly show its first editor after that startup hint is consumed.
+        if (auto* peer = getPeer())
+            ShowWindow (static_cast<HWND> (peer->getNativeHandle()), SW_SHOWNORMAL);
+#endif
         toFront (true);
     }
 
@@ -250,7 +257,7 @@ class HostApplication final : public juce::JUCEApplication,
 {
 public:
     const juce::String getApplicationName() override { return "UnifiedAudio Engine Host"; }
-    const juce::String getApplicationVersion() override { return "0.1.0"; }
+    const juce::String getApplicationVersion() override { return "0.1.4"; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
     void initialise (const juce::String&) override
@@ -273,8 +280,8 @@ public:
         const auto logDirectory = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                                       .getChildFile ("UnifiedAudio").getChildFile ("logs");
         logDirectory.createDirectory();
-        logger = std::make_unique<juce::FileLogger> (logDirectory.getChildFile ("engine.log"),
-                                                     "UnifiedAudio Engine Host");
+        logger = std::make_unique<BoundedLogger> (logDirectory.getChildFile ("engine.log"));
+        logger->logMessage ("UnifiedAudio Engine Host");
         juce::Logger::setCurrentLogger (logger.get());
 
         engine = std::make_unique<AudioEngine>();
@@ -951,7 +958,8 @@ private:
             {
                 const auto sampleRate = engine->getGraphSampleRate();
                 juce::String error;
-                if (! engine->getChain().addPlugin (engine->getFormatManager(), *type, sampleRate, 128, error))
+                if (! engine->getChain().addPlugin (engine->getFormatManager(), *type, sampleRate,
+                                                   engine->getGraphBlockSize(), error))
                     return responseFor (request, snapshot(), "plugin-load", error);
             }
             else return responseFor (request, snapshot(), "plugin-not-found", "Plugin is not present in the scan cache.");
@@ -1025,7 +1033,7 @@ private:
         return responseFor (request, snapshot());
     }
 
-    std::unique_ptr<juce::FileLogger> logger;
+    std::unique_ptr<BoundedLogger> logger;
     std::unique_ptr<juce::InterProcessLock> instanceLock;
     std::unique_ptr<AudioEngine> engine;
     juce::OwnedArray<PluginEditorWindow> pluginEditors;

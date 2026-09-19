@@ -23,8 +23,8 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <ComboBox x:Name="InputBox" Header="Entrada física global del motor" HorizontalAlignment="Stretch" />
-                <ComboBox x:Name="OutputBox" Grid.Column="1" Header="Salida virtual final" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="InputBox" SelectionChanged="Endpoint_SelectionChanged" Header="Entrada física global del motor" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="OutputBox" SelectionChanged="Endpoint_SelectionChanged" Grid.Column="1" Header="Salida virtual final" HorizontalAlignment="Stretch" />
                 <ToggleSwitch x:Name="FollowGlobalInputSwitch" Grid.Row="1" Header="Seguir el micrófono físico predeterminado; si Windows apunta a un cable se usa esta entrada como respaldo" />
                 <CheckBox x:Name="PreserveMixerOnStartCheckBox" Grid.Row="2" Content="Conservar la mezcla de PC al iniciar (elección explícita; se bloquea si Windows Listen crea un loop)" />
                 <NumberBox x:Name="BufferBox" Grid.Row="3" Header="Buffer solicitado (0 = Auto)" Minimum="0" Maximum="4096" SmallChange="16" Value="0" SpinButtonPlacementMode="Compact" />

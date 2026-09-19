@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnifiedAudio.Core.Persistence;
 using UnifiedAudio.Models;
@@ -167,6 +167,14 @@ public sealed class SettingsStore
         var migrateProfileInputPolicy = state.Version < 8;
         state.Profiles ??= [];
         state.Settings ??= new AppSettings();
+        if (string.IsNullOrWhiteSpace(state.Settings.MuteSoundPath))
+            state.Settings.MuteSoundPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "mute.wav");
+        if (string.IsNullOrWhiteSpace(state.Settings.UnmuteSoundPath))
+            state.Settings.UnmuteSoundPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "unmute.wav");
+        if (string.IsNullOrWhiteSpace(state.Settings.PttOnSoundPath))
+            state.Settings.PttOnSoundPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "ptt_on.wav");
+        if (string.IsNullOrWhiteSpace(state.Settings.PttOffSoundPath))
+            state.Settings.PttOffSoundPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "ptt_off.wav");
         state.Settings.GlobalPhysicalInput ??= new SavedDeviceReference();
         state.Settings.MuteOnlyHotkey ??= new HotkeyBinding();
         state.Settings.MuteHotkey ??= new HotkeyBinding

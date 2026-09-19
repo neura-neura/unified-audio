@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.22)
-project(UnifiedAudioEngineHost VERSION 0.1.0 LANGUAGES C CXX)
+﻿cmake_minimum_required(VERSION 3.22)
+project(UnifiedAudioEngineHost VERSION 0.1.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,8 +75,8 @@ target_link_libraries(UnifiedAudioEngineHost PRIVATE
 )
 
 juce_add_console_app(UnifiedAudioEngineTests PRODUCT_NAME "UnifiedAudioEngineTests")
-target_sources(UnifiedAudioEngineTests PRIVATE tests/EngineTests.cpp)
-target_compile_definitions(UnifiedAudioEngineTests PRIVATE JUCE_PLUGINHOST_VST3=1)
+target_sources(UnifiedAudioEngineTests PRIVATE tests/EngineTests.cpp src/audio/PluginChain.cpp)
+target_compile_definitions(UnifiedAudioEngineTests PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(UnifiedAudioEngineTests PRIVATE
     UnifiedAudioEngineCore
     juce::juce_audio_processors

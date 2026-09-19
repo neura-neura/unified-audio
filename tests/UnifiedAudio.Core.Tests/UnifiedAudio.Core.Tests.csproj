@@ -17,4 +17,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\UnifiedAudio.Core\UnifiedAudio.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../src/UnifiedAudio.App/Helpers/Loc.cs" Link="AppHelpers/Loc.cs" />
+    <Compile Include="../../src/UnifiedAudio.App/Helpers/LiteralCatalog.cs" Link="AppHelpers/LiteralCatalog.cs" />
+    <Compile Include="../../src/UnifiedAudio.App/Helpers/StringCatalog.cs" Link="AppHelpers/StringCatalog.cs" />
+  </ItemGroup>
 </Project>

@@ -277,6 +277,13 @@ public sealed partial class MuteFeedbackPage : Page
         Controller.Settings.OverlayScalePercent = (int)Math.Clamp(OverlayScaleBox.Value, 50, 300);
         Controller.Settings.OverlayRelativeX = Math.Clamp(OverlayXBox.Value / 100.0, 0.0, 1.0);
         Controller.Settings.OverlayRelativeY = Math.Clamp(OverlayYBox.Value / 100.0, 0.0, 1.0);
+        var monitorId = Controller.Settings.OverlayMonitorId;
+        if (!string.IsNullOrWhiteSpace(monitorId))
+            Controller.Settings.OverlayMonitorPlacements[monitorId] = new OverlayMonitorPlacement
+            {
+                RelativeX = Controller.Settings.OverlayRelativeX,
+                RelativeY = Controller.Settings.OverlayRelativeY
+            };
         PersistFeedbackSettings();
     }
 

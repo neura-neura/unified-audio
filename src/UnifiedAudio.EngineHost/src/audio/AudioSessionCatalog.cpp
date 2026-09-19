@@ -110,7 +110,7 @@ juce::Array<AudioEndpointIdentity> listAudioEndpointIdentities (bool capture)
     if (SUCCEEDED (CoCreateInstance (__uuidof (MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                      IID_PPV_ARGS (&enumerator)))
         && SUCCEEDED (enumerator->EnumAudioEndpoints (capture ? eCapture : eRender,
-                                                       DEVICE_STATEMASK_ALL, &devices)))
+                                                       DEVICE_STATE_ACTIVE, &devices)))
     {
         UINT count = 0;
         devices->GetCount (&count);

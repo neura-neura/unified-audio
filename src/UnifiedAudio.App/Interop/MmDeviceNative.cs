@@ -447,7 +447,7 @@ internal static unsafe class MmDeviceNative
                     3 => (int)checkbox.data1 != 0,
                     _ => false
                 };
-                unknown = checkbox.vt is not (11 or 17 or 18 or 19 or 3);
+                unknown = checkbox.vt is not (0 or 1 or 11 or 17 or 18 or 19 or 3);
             }
             checkbox.Clear();
             if (!enabled || unknown)
@@ -456,7 +456,7 @@ internal static unsafe class MmDeviceNative
             var targetKnown = false;
             var usesDefault = false;
             var targetId = string.Empty;
-            foreach (var pid in new uint[] { 0, 2 })
+            foreach (var pid in new uint[] { 0 })
             {
                 var targetKey = new PropertyKey { fmtid = settingsGuid, pid = pid };
                 PropVariant target = default;
@@ -476,9 +476,11 @@ internal static unsafe class MmDeviceNative
                         break;
                     case 31 when target.data1 != nint.Zero:
                         targetId = Marshal.PtrToStringUni(target.data1) ?? string.Empty;
+                        usesDefault = string.IsNullOrEmpty(targetId);
                         break;
                     case 8 when target.data1 != nint.Zero:
                         targetId = Marshal.PtrToStringBSTR(target.data1);
+                        usesDefault = string.IsNullOrEmpty(targetId);
                         break;
                     default:
                         unknown = true;

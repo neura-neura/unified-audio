@@ -1,0 +1,1 @@
+Sounds from https://github.com/neura-neura/AHK_MicMute commit bc5e0e6d8b27b034daf4a2742ce062ef06d4e41b, src/resources. See LICENSE.txt.

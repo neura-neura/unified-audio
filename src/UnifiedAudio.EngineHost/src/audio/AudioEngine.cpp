@@ -1,4 +1,5 @@
 #include "audio/AudioEngine.h"
+#include "audio/ActiveAudioBlock.h"
 #include "audio/FeedbackLoopDetector.h"
 using IOProc = juce::AudioProcessorGraph::AudioGraphIOProcessor;
 
@@ -928,7 +929,7 @@ juce::String AudioEngine::restoreChain (const juce::Array<PluginEntryState>& plu
             continue;
         }
         juce::String err;
-        if (pluginChain->addPlugin (formatManager, *type, sr, 128, err))
+        if (pluginChain->addPlugin (formatManager, *type, sr, graphBlockSize.load(), err))
         {
             const int idx = (int) pluginChain->entries().size() - 1;
             if (auto* node = graph.getNodeForId (pluginChain->entries()[(size_t) idx].node))
@@ -1031,13 +1032,14 @@ void AudioEngine::renderAudio (float* const* outputChannelData,
     int offset = 0;
     while (offset < numSamples)
     {
-        const auto chunk = juce::jmin (bufferCapacity, numSamples - offset);
+        const auto chunk = juce::jmin (bufferCapacity,
+                                      juce::jmax (1, graphBlockSize.load()), numSamples - offset);
         processBuffer.clear (0, chunk);
         auto* left = processBuffer.getWritePointer (0);
         auto* right = processBuffer.getWritePointer (1);
         audioBridge.pop (left, right, chunk);
         processMidi.clear();
-        graph.processBlock (processBuffer, processMidi);
+        processActiveAudioBlock (graph, processBuffer, processMidi, chunk);
 
         const bool shouldMute = muteTarget.load (std::memory_order_acquire);
         const float targetGain = shouldMute ? 0.0f : 1.0f;

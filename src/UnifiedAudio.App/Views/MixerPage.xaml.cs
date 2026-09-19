@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using UnifiedAudio.Helpers;
@@ -7,8 +7,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 
 namespace UnifiedAudio.Views;
 
@@ -68,9 +66,13 @@ public sealed partial class MixerPage : Page
     private AppController Controller => App.Instance.Controller;
     private DispatcherQueueTimer? _timer;
     private bool _refreshing;
+    private bool _loading = true;
+    private bool _applying;
+    private bool _pendingApply;
+    private DispatcherQueueTimer? _applyTimer;
+    private const string DefaultDeviceId = "@windows-default";
     private bool _refreshingSessions;
     private int _telemetryTicks;
-    private IReadOnlyList<float> _spectrum = [];
     public ObservableCollection<AppSessionRow> SessionRows { get; } = [];
 
     public MixerPage()
@@ -91,6 +93,16 @@ public sealed partial class MixerPage : Page
             LiteralCatalog.Get("Todas salvo las desmarcadas")
         };
         UpdateGainLabels();
+        _applyTimer = DispatcherQueue.CreateTimer();
+        _applyTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _applyTimer.IsRepeating = false;
+        _applyTimer.Tick += async (_, _) => await ApplyAsync();
+        ModeButtons.SelectionChanged += (_, _) => QueueApply();
+        DuckingSwitch.Toggled += (_, _) => QueueApply();
+        ProcessFilterSwitch.Toggled += (_, _) => QueueApply();
+        ProcessFilterModeBox.SelectionChanged += (_, _) => QueueApply();
+        foreach (var box in new[] { DuckAmountBox, ThresholdBox, AttackBox, HoldBox, ReleaseBox })
+            box.ValueChanged += (_, _) => QueueApply();
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
@@ -104,6 +116,8 @@ public sealed partial class MixerPage : Page
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
+        _applyTimer?.Stop();
+        if (_pendingApply) _ = ApplyAsync();
         if (_timer is null) return;
         _timer.Stop();
         _timer.Tick -= Timer_Tick;
@@ -123,7 +137,8 @@ public sealed partial class MixerPage : Page
             if (!Controller.Engine.IsConnected) await Controller.Engine.ConnectAsync();
             var devices = await Controller.Engine.GetDevicesAsync();
             var snapshot = await Controller.Engine.GetSnapshotAsync();
-            SystemDeviceBox.ItemsSource = devices.OutputEndpoints;
+            var options = EndpointOptions(devices.OutputEndpoints);
+            SystemDeviceBox.ItemsSource = options;
             var selectedEndpoint = !string.IsNullOrWhiteSpace(snapshot.SystemCaptureDeviceId)
                 ? devices.OutputEndpoints.FirstOrDefault(endpoint =>
                     string.Equals(endpoint.Id, snapshot.SystemCaptureDeviceId, StringComparison.OrdinalIgnoreCase))
@@ -132,7 +147,8 @@ public sealed partial class MixerPage : Page
                     ? devices.OutputEndpoints.First(endpoint =>
                         string.Equals(endpoint.Name, snapshot.SystemCaptureDeviceName, StringComparison.OrdinalIgnoreCase))
                     : null;
-            SystemDeviceBox.SelectedItem = selectedEndpoint;
+            SystemDeviceBox.SelectedItem = Controller.Settings.SystemAudioFollowsDefault
+                ? options[0] : selectedEndpoint ?? options[0];
             ModeButtons.SelectedIndex = Math.Clamp(snapshot.MixerMode, 0, 2);
             VoiceSlider.Value = snapshot.VoiceGain * 100.0;
             SystemSlider.Value = snapshot.SystemGain * 100.0;
@@ -146,6 +162,8 @@ public sealed partial class MixerPage : Page
             ProcessFilterModeBox.SelectedIndex = snapshot.ProcessFilterExclusionMode ? 1 : 0;
             await RefreshSessionsAsync();
             RenderTelemetry(snapshot);
+            _loading = false;
+            QueueApply();
         }
         catch (Exception ex)
         {
@@ -153,13 +171,24 @@ public sealed partial class MixerPage : Page
         }
     }
 
-    private async void ApplyButton_Click(object sender, RoutedEventArgs e)
+    private void QueueApply()
     {
-        ApplyButton.IsEnabled = false;
+        if (_loading) return;
+        _pendingApply = true;
+        _applyTimer?.Stop();
+        _applyTimer?.Start();
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_loading || _applying) return;
+        _applying = true;
+        _pendingApply = false;
         try
         {
             var mode = (EngineMixerMode)Math.Clamp(ModeButtons.SelectedIndex, 0, 2);
-            var selectedEndpoint = SystemDeviceBox.SelectedItem as EngineEndpointDescriptor;
+            var choice = SystemDeviceBox.SelectedItem as EngineEndpointDescriptor;
+            var selectedEndpoint = ResolveEndpoint(choice);
             if (mode != EngineMixerMode.Voice && selectedEndpoint is null)
                 throw new InvalidOperationException(LiteralCatalog.Get("Selecciona un endpoint de sistema identificado para mezclar audio del PC."));
             var snapshot = await Controller.Engine.ConfigurePipelineAsync(
@@ -183,6 +212,8 @@ public sealed partial class MixerPage : Page
                             (float)(row.GainPercent / 100.0), !row.Included)).ToArray()),
                 null,
                 null);
+            Controller.Settings.SystemAudioFollowsDefault = choice?.Id == DefaultDeviceId;
+            Controller.Persist();
             RenderTelemetry(snapshot);
             StatusBar.Title = snapshot.SystemCaptureRunning || mode == EngineMixerMode.Voice
                 ? LiteralCatalog.Get("Mezclador activo")
@@ -201,7 +232,8 @@ public sealed partial class MixerPage : Page
         }
         finally
         {
-            ApplyButton.IsEnabled = true;
+            _applying = false;
+            if (_pendingApply) _applyTimer?.Start();
         }
     }
 
@@ -229,7 +261,21 @@ public sealed partial class MixerPage : Page
         _refreshingSessions = true;
         try
         {
-            var selectedEndpoint = SystemDeviceBox.SelectedItem as EngineEndpointDescriptor;
+            var choice = SystemDeviceBox.SelectedItem as EngineEndpointDescriptor;
+            var devices = await Controller.Engine.GetDevicesAsync();
+            var options = EndpointOptions(devices.OutputEndpoints);
+            var available = options.FirstOrDefault(endpoint => endpoint.Id == choice?.Id);
+            if (SystemDeviceBox.ItemsSource is not IReadOnlyList<EngineEndpointDescriptor> previous
+                || !previous.SequenceEqual(options))
+            {
+                var wasLoading = _loading;
+                _loading = true;
+                SystemDeviceBox.ItemsSource = options;
+                SystemDeviceBox.SelectedItem = available ?? choice;
+                _loading = wasLoading;
+            }
+            var selectedEndpoint = ResolveEndpoint(choice);
+            if (selectedEndpoint is null) throw new InvalidOperationException(LiteralCatalog.Get("No hay un dispositivo predeterminado disponible."));
             var response = await Controller.Engine.GetAudioSessionsAsync(
                 selectedEndpoint?.Name ?? string.Empty,
                 selectedEndpoint?.Id ?? string.Empty);
@@ -251,6 +297,10 @@ public sealed partial class MixerPage : Page
                         Included = session.Included,
                         GainPercent = session.ConfiguredGain * 100.0
                     };
+                    row.PropertyChanged += (_, args) =>
+                    {
+                        if (args.PropertyName is nameof(AppSessionRow.Included) or nameof(AppSessionRow.GainPercent)) QueueApply();
+                    };
                     SessionRows.Add(row);
                 }
                 row.ProcessId = session.ProcessId;
@@ -264,10 +314,14 @@ public sealed partial class MixerPage : Page
 
             var activeCount = SessionRows.Count(row => row.Active);
             SessionSummaryText.Text = string.Format(LiteralCatalog.Get("{0} activa(s) · {1} detectada(s) · máximo 32 capturas activas"), activeCount, SessionRows.Count);
+            SessionStatusBar.IsOpen = false;
         }
         catch (Exception ex)
         {
-            ShowError(ex);
+            SessionStatusBar.Title = LiteralCatalog.Get("Filtrado por aplicación");
+            SessionStatusBar.Message = ex.Message;
+            SessionStatusBar.Severity = InfoBarSeverity.Warning;
+            SessionStatusBar.IsOpen = true;
         }
         finally
         {
@@ -279,16 +333,18 @@ public sealed partial class MixerPage : Page
 
     private async void SystemDeviceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (IsLoaded) await RefreshSessionsAsync();
+        QueueApply();
+        if (!_loading && IsLoaded) await RefreshSessionsAsync();
     }
 
     private void RenderTelemetry(EngineSnapshot snapshot)
     {
-        VoiceMeter.Value = snapshot.VoicePeak;
-        SystemMeter.Value = snapshot.SystemPeak;
-        OutputMeter.Value = snapshot.OutputPeak;
-        _spectrum = snapshot.Spectrum;
-        RenderSpectrum();
+        VoiceMeter.Value = MeterValue(snapshot.VoicePeak);
+        VoiceMeterText.Text = ToDb(snapshot.VoicePeak);
+        SystemMeter.Value = MeterValue(snapshot.SystemPeak);
+        SystemMeterText.Text = ToDb(snapshot.SystemPeak);
+        OutputMeter.Value = MeterValue(snapshot.OutputPeak);
+        OutputMeterText.Text = ToDb(snapshot.OutputPeak);
         var source = snapshot.ProcessFilterEnabled
             ? string.Format(LiteralCatalog.Get("Apps {0}/{1}"), snapshot.ActiveProcessCaptureCount, snapshot.ConfiguredProcessRuleCount)
             : LiteralCatalog.Get("Endpoint completo");
@@ -296,45 +352,47 @@ public sealed partial class MixerPage : Page
             ToDb(snapshot.VoicePeak), ToDb(snapshot.SystemPeak), ToDb(snapshot.OutputPeak), source,
             snapshot.DuckingGain, snapshot.Underruns, snapshot.Overruns);
 
+        FeedbackStatusBar.IsOpen = snapshot.FeedbackLoopGuarded
+            || (snapshot.MixerMode != 0 && snapshot.FeedbackLoopDetected);
         if (snapshot.FeedbackLoopGuarded)
         {
-            StatusBar.Title = LiteralCatalog.Get("Protección contra loop digital");
-            StatusBar.Message = string.IsNullOrWhiteSpace(snapshot.FeedbackLoopDescription)
+            FeedbackStatusBar.Title = LiteralCatalog.Get("Protección contra loop digital");
+            FeedbackStatusBar.Message = string.IsNullOrWhiteSpace(snapshot.FeedbackLoopDescription)
                 ? LiteralCatalog.Get("La captura de sistema se detuvo y el mezclador volvió a Voz para evitar feedback digital.")
                 : snapshot.FeedbackLoopDescription;
-            StatusBar.Severity = InfoBarSeverity.Warning;
-            StatusBar.IsOpen = true;
+            FeedbackStatusBar.Severity = InfoBarSeverity.Warning;
         }
-        else if (snapshot.FeedbackLoopDetected)
+        else if (snapshot.MixerMode != 0 && snapshot.FeedbackLoopDetected)
         {
-            StatusBar.Title = LiteralCatalog.Get("Ruta de feedback detectada");
-            StatusBar.Message = string.IsNullOrWhiteSpace(snapshot.FeedbackLoopDescription)
+            FeedbackStatusBar.Title = LiteralCatalog.Get("Ruta de feedback detectada");
+            FeedbackStatusBar.Message = string.IsNullOrWhiteSpace(snapshot.FeedbackLoopDescription)
                 ? LiteralCatalog.Get("Windows Listen puede devolver la salida final a la captura de sistema. Usa Voz o desactiva Listen antes de mezclar PC.")
                 : snapshot.FeedbackLoopDescription;
-            StatusBar.Severity = InfoBarSeverity.Warning;
-            StatusBar.IsOpen = true;
+            FeedbackStatusBar.Severity = InfoBarSeverity.Warning;
         }
     }
 
-    private void SpectrumCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => RenderSpectrum();
-
-    private void RenderSpectrum()
+    private void GainSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
-        if (SpectrumLine is null || SpectrumCanvas is null || _spectrum.Count == 0) return;
-        var width = SpectrumCanvas.ActualWidth;
-        var height = SpectrumCanvas.ActualHeight;
-        if (width <= 0 || height <= 0) return;
-        var points = new PointCollection();
-        for (var index = 0; index < _spectrum.Count; index++)
-        {
-            var x = _spectrum.Count == 1 ? 0 : width * index / (_spectrum.Count - 1);
-            var y = height * (1.0 - Math.Clamp(_spectrum[index], 0.0f, 1.0f));
-            points.Add(new Point(x, y));
-        }
-        SpectrumLine.Points = points;
+        UpdateGainLabels();
+        QueueApply();
     }
 
-    private void GainSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e) => UpdateGainLabels();
+    private static double MeterValue(float peak) => peak <= 0 ? 0 : Math.Clamp((20 * Math.Log10(peak) + 60) / 60, 0, 1);
+
+    private IReadOnlyList<EngineEndpointDescriptor> EndpointOptions(IReadOnlyList<EngineEndpointDescriptor> endpoints)
+    {
+        var current = Controller.Audio.GetDevices(UnifiedAudio.Models.AudioFlow.Playback).FirstOrDefault(d => d.IsDefaultMultimedia);
+        return new[] { new EngineEndpointDescriptor(DefaultDeviceId,
+            $"{LiteralCatalog.Get("Predeterminado de Windows")} — {current?.Name ?? LiteralCatalog.Get("No disponible")}") }.Concat(endpoints).ToArray();
+    }
+
+    private EngineEndpointDescriptor? ResolveEndpoint(EngineEndpointDescriptor? choice)
+    {
+        if (choice?.Id != DefaultDeviceId) return choice;
+        var current = Controller.Audio.GetDevices(UnifiedAudio.Models.AudioFlow.Playback).FirstOrDefault(d => d.IsDefaultMultimedia);
+        return current is null ? null : new(current.Id, current.Name);
+    }
 
     private void UpdateGainLabels()
     {
@@ -348,7 +406,8 @@ public sealed partial class MixerPage : Page
 
     private void ShowError(Exception ex)
     {
-        StatusBar.Title = Loc.Get("EngineUnavailable");
+        StatusBar.Title = Controller.Engine.IsConnected
+            ? LiteralCatalog.Get("No se pudo aplicar la mezcla") : Loc.Get("EngineUnavailable");
         StatusBar.Message = ex.Message;
         StatusBar.Severity = InfoBarSeverity.Error;
         StatusBar.IsOpen = true;

@@ -12,6 +12,7 @@ param(
     [switch]$TestExclusionFilter,
     [switch]$TestAtomicRollback,
     [switch]$TestProfilePluginPreset,
+    [switch]$TestEndpointCatalog,
     [string]$EnginePath = ""
 )
 
@@ -79,6 +80,15 @@ try {
         if ($scanWaitCompleted -ne $true) { throw "Plugin fingerprint/scan did not finish within $WaitForScanSeconds seconds." }
     }
     $devices = Send-EngineCommand "devices.list"
+    if ($TestEndpointCatalog) {
+        foreach ($endpoint in $devices.outputEndpoints) {
+            Send-EngineCommand "audio.sessions.list" @{ deviceId = $endpoint.id; deviceName = $endpoint.name } | Out-Null
+        }
+        for ($poll = 0; $poll -lt 12; $poll++) {
+            Send-EngineCommand "engine.snapshot" | Out-Null
+            Send-EngineCommand "audio.sessions.list" | Out-Null
+        }
+    }
     $sessions = Send-EngineCommand "audio.sessions.list" @{ deviceName = $SystemDeviceName }
     $processFilterRoundTrip = $null
     $processFilterTarget = $sessions.sessions | Where-Object { $_.active } | Select-Object -First 1

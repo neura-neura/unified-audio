@@ -2,15 +2,92 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "audio/Metering.h"
 #include "audio/AsyncAudioBridge.h"
+#include "audio/ActiveAudioBlock.h"
 #include "audio/GraphConnections.h"
 #include "audio/FeedbackLoopPolicy.h"
 #include "audio/ScanCoordinator.h"
 #include "state/Persistence.h"
 #include "state/PluginScanCache.h"
 #include <iostream>
+#include "VstBlockCheck.h"
+#include "VoiceChainCheck.h"
+#include "BoundedLogger.h"
 
 namespace
 {
+class DelayProbe final : public juce::AudioProcessor
+{
+public:
+    DelayProbe(bool mono = false) : AudioProcessor (BusesProperties()
+        .withInput ("In", mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo())
+        .withOutput ("Out", mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo())) {}
+    const juce::String getName() const override { return "Delay probe"; }
+    void prepareToPlay (double, int) override { position = 0; framesSeen = 0; history.clear(); }
+    void releaseResources() override {}
+    void processBlock (juce::AudioBuffer<float>& block, juce::MidiBuffer&) override
+    {
+        framesSeen += block.getNumSamples();
+        for (int frame = 0; frame < block.getNumSamples(); ++frame)
+        {
+            for (int channel = 0; channel < block.getNumChannels(); ++channel)
+            {
+                const auto delayed = history.getSample (channel, position);
+                history.setSample (channel, position, block.getSample (channel, frame));
+                block.setSample (channel, frame, delayed);
+            }
+            position = (position + 1) % 600;
+        }
+    }
+    double getTailLengthSeconds() const override { return 0; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return false; }
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+    void getStateInformation (juce::MemoryBlock&) override {}
+    void setStateInformation (const void*, int) override {}
+    int framesSeen = 0;
+private:
+    juce::AudioBuffer<float> history { 2, 600 };
+    int position = 0;
+};
+
+struct ActiveBlockTests final : juce::UnitTest
+{
+    ActiveBlockTests() : UnitTest ("Active callback frames") {}
+    void runTest() override
+    {
+        beginTest ("Delay preserves sample time across variable callbacks without replaying spare storage");
+        DelayProbe delay;
+        delay.prepareToPlay (48000, 512);
+        juce::AudioBuffer<float> storage (2, 8192);
+        juce::MidiBuffer midi;
+        int elapsed = 0;
+        for (const auto frames : { 480, 128, 512, 64, 441, 480, 128, 512 })
+        {
+            // Poison unused capacity: it must neither enter the delay nor be modified.
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < storage.getNumSamples(); ++i)
+                    storage.setSample (c, i, i < frames ? 0.0f : 0.875f);
+            if (elapsed == 0) storage.setSample (0, 0, 1.0f);
+            processActiveAudioBlock (delay, storage, midi, frames);
+            for (int i = 0; i < frames; ++i)
+            {
+                expectEquals (storage.getSample (0, i), elapsed + i == 600 ? 1.0f : 0.0f);
+                expectEquals (storage.getSample (1, i), 0.0f);
+            }
+            expectEquals (storage.getSample (0, frames), 0.875f);
+            elapsed += frames;
+            expectEquals (delay.framesSeen, elapsed);
+        }
+    }
+};
+ActiveBlockTests activeBlockTests;
+
 struct MeteringTests final : juce::UnitTest
 {
     MeteringTests() : juce::UnitTest ("Metering") {}
@@ -71,6 +148,40 @@ struct GraphTests final : juce::UnitTest
             { input, 0, 1 }, { converter, 1, 2 }, { output, 2, 0 }
         });
         expectEquals (static_cast<int> (connections.size()), 3);
+
+        beginTest ("Mono effect feeds both stereo channels");
+        const auto monoConnections = computeChainConnections ({
+            { input, 0, 2 }, { converter, 1, 1 }, { output, 2, 0 }
+        });
+        expectEquals (static_cast<int> (monoConnections.size()), 3);
+        expectEquals (monoConnections.back().sourceChannel, 0);
+        expectEquals (monoConnections.back().destChannel, 1);
+
+        beginTest ("Real mono graph emits identical left/right delayed impulses");
+        juce::AudioProcessorGraph graph;
+        using IO = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+        using Update = juce::AudioProcessorGraph::UpdateKind;
+        graph.setPlayConfigDetails (2, 2, 48000, 480);
+        auto in = graph.addNode (std::make_unique<IO> (IO::audioInputNode), {}, Update::sync);
+        auto mono = graph.addNode (std::make_unique<DelayProbe> (true), {}, Update::sync);
+        auto out = graph.addNode (std::make_unique<IO> (IO::audioOutputNode), {}, Update::sync);
+        for (const auto& c : computeChainConnections ({ {in->nodeID, 0, 2}, {mono->nodeID, 1, 1}, {out->nodeID, 2, 0} }))
+            expect (graph.addConnection ({{c.sourceNode, c.sourceChannel}, {c.destNode, c.destChannel}}, Update::sync));
+        graph.prepareToPlay (48000, 480);
+        juce::AudioBuffer<float> audio (2, 480);
+        juce::MidiBuffer midi;
+        for (int block = 0; block < 4; ++block)
+        {
+            audio.clear();
+            if (block == 0) audio.setSample (0, 0, 1.0f);
+            graph.processBlock (audio, midi);
+            for (int i = 0; i < 480; ++i)
+            {
+                expectEquals (audio.getSample (0, i), block * 480 + i == 600 ? 1.0f : 0.0f);
+                expectEquals (audio.getSample (1, i), audio.getSample (0, i));
+            }
+        }
+        graph.releaseResources();
     }
 };
 GraphTests graphTests;
@@ -172,11 +283,14 @@ struct FeedbackLoopPolicyTests final : juce::UnitTest
         virtualSystem.systemVirtualCable = true;
         expect (evaluateFeedbackLoop (virtualSystem).risk);
 
-        beginTest ("Endpoint-full loopback is unsafe when a receiver consumes final CABLE Output");
+        beginTest ("Receiving final CABLE Output alone does not prove an endpoint return route");
         auto endpointConsumer = verifiedSystemRoute();
         endpointConsumer.finalVirtualCable = true;
         endpointConsumer.finalCaptureConsumerDetected = true;
         endpointConsumer.processFilterEnabled = false;
+        expect (! evaluateFeedbackLoop (endpointConsumer).risk);
+        endpointConsumer.listenEnabled = true;
+        endpointConsumer.pairedCaptureListenToSystem = true;
         expect (evaluateFeedbackLoop (endpointConsumer).risk);
 
         beginTest ("A receiver excluded from process capture remains safe");
@@ -415,10 +529,40 @@ struct PluginFingerprintTests final : juce::UnitTest
     }
 };
 PluginFingerprintTests pluginFingerprintTests;
+class LogRotationTests final : public juce::UnitTest
+{
+public:
+    LogRotationTests() : juce::UnitTest ("Bounded logs") {}
+    void runTest() override
+    {
+        beginTest ("Engine logs rotate during a session and reclaim oversized legacy logs");
+        const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+            .getNonexistentChildFile ("UnifiedAudio-log-test", "", false);
+        root.createDirectory();
+        const auto file = root.getChildFile ("engine.log");
+        file.replaceWithText (juce::String::repeatedString ("x", static_cast<int> (BoundedLogger::maximumBytes + 1)));
+        BoundedLogger log (file);
+        for (int i = 0; i < 850; ++i)
+            log.logMessage (juce::String::repeatedString ("x", 8192));
+        log.logMessage ("newest");
+        const auto files = root.findChildFiles (juce::File::findFiles, false);
+        expectEquals (files.size(), 3);
+        for (const auto& item : files) expect (item.getSize() <= BoundedLogger::maximumBytes);
+        expect (file.loadFileAsString().contains ("newest"));
+        root.deleteRecursively();
+    }
+};
+LogRotationTests logRotationTests;
+
 }
 
-int main()
+int main (int argc, char** argv)
 {
+    juce::ScopedJuceInitialiser_GUI initialiseJuce;
+    if (argc == 3 && juce::String (argv[1]) == "--voice-chain")
+        return checkVoiceChain (juce::String (argv[2]));
+    if (argc == 3 && juce::String (argv[1]) == "--vst")
+        return checkVstBlocks (juce::String (argv[2]));
     juce::UnitTestRunner runner;
     runner.runAllTests();
     int failures = 0;

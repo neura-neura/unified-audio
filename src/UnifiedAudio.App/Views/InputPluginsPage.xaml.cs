@@ -56,65 +56,17 @@ public sealed partial class InputPluginsPage : Page
             _snapshot = await Controller.Engine.GetSnapshotAsync();
             var inputs = Controller.Audio.GetPhysicalCaptureDevices();
             var outputs = Controller.Audio.GetDevices(AudioFlow.Playback);
-            var currentInput = InputBox.SelectedItem as AudioDeviceInfo;
-            var savedGlobalInput = Controller.Settings.GlobalPhysicalInput;
-            var hasSavedGlobalInput = HasReference(savedGlobalInput);
-            var initializeFromSnapshot = Controller.Settings.GlobalInputMode == GlobalInputMode.Unconfigured
-                                         && !hasSavedGlobalInput;
-            var selectedInputId = !string.IsNullOrWhiteSpace(currentInput?.Id)
-                ? currentInput.Id
-                : hasSavedGlobalInput
-                    ? savedGlobalInput.Id
-                    : initializeFromSnapshot
-                        ? _snapshot.InputDeviceId
-                        : string.Empty;
-            var selectedInputName = !string.IsNullOrWhiteSpace(currentInput?.Name)
-                ? currentInput.Name
-                : hasSavedGlobalInput
-                    ? savedGlobalInput.Name
-                    : initializeFromSnapshot
-                        ? _snapshot.InputDeviceName
-                        : string.Empty;
-            var currentOutput = OutputBox.SelectedItem as AudioDeviceInfo;
-            var snapshotOutput = new SavedDeviceReference
-            {
-                Id = _snapshot.OutputDeviceId,
-                Name = _snapshot.OutputDeviceName
-            };
-            var snapshotOutputDevice = outputs.FirstOrDefault(device =>
-                (!string.IsNullOrWhiteSpace(snapshotOutput.Id)
-                 && string.Equals(device.Id, snapshotOutput.Id, StringComparison.OrdinalIgnoreCase))
-                || (!string.IsNullOrWhiteSpace(snapshotOutput.Name)
-                    && string.Equals(device.Name, snapshotOutput.Name, StringComparison.OrdinalIgnoreCase)));
-            if (snapshotOutputDevice is not null)
-                snapshotOutput.Name = snapshotOutputDevice.Name;
-
-            // The engine snapshot is runtime state, not automatically a saved
-            // final endpoint. A physical/default render must not block the
-            // policy from suggesting the standard CABLE Input. A virtual
-            // snapshot remains an existing selection and is preserved.
-            var hasSavedVirtualSnapshot = HasReference(snapshotOutput)
-                                          && IsVirtualRender(snapshotOutput.Name);
-            var selectedOutput = currentOutput is not null
-                ? new SavedDeviceReference { Id = currentOutput.Id, Name = currentOutput.Name }
-                : hasSavedVirtualSnapshot
-                    ? snapshotOutput
-                    : null;
-            InputBox.ItemsSource = inputs;
-            OutputBox.ItemsSource = outputs;
-            InputBox.SelectedItem = inputs.FirstOrDefault(device =>
-                string.Equals(device.Id, selectedInputId, StringComparison.OrdinalIgnoreCase))
-                ?? inputs.FirstOrDefault(device =>
-                    string.Equals(device.Name, selectedInputName, StringComparison.OrdinalIgnoreCase));
-            var outputDecision = Controller.Audio.ResolveFinalVirtualRender(outputs, selectedOutput);
-            OutputBox.SelectedItem = outputDecision.Selected is null
-                ? outputs.FirstOrDefault(device =>
-                    string.Equals(device.Id, selectedOutput?.Id, StringComparison.OrdinalIgnoreCase))
-                  ?? outputs.FirstOrDefault(device =>
-                    string.Equals(device.Name, selectedOutput?.Name, StringComparison.OrdinalIgnoreCase))
-                : outputs.FirstOrDefault(device =>
-                    string.Equals(device.Id, outputDecision.Selected.Id, StringComparison.OrdinalIgnoreCase));
-            FollowGlobalInputSwitch.IsOn = Controller.Settings.GlobalInputMode == GlobalInputMode.FollowWindowsDefault;
+            var defaultInput = Controller.Audio.GetDevices(AudioFlow.Recording).FirstOrDefault(d => d.IsDefaultMultimedia);
+            var defaultOutput = outputs.FirstOrDefault(d => d.IsDefaultMultimedia);
+            var inputOptions = new[] { DefaultOption(defaultInput, AudioFlow.Recording) }.Concat(inputs).ToList();
+            var outputOptions = new[] { DefaultOption(defaultOutput, AudioFlow.Playback) }.Concat(outputs).ToList();
+            InputBox.ItemsSource = inputOptions;
+            OutputBox.ItemsSource = outputOptions;
+            InputBox.SelectedItem = Controller.Settings.GlobalInputMode != GlobalInputMode.Fixed
+                ? inputOptions[0] : inputOptions.FirstOrDefault(d => d.Id == Controller.Settings.GlobalPhysicalInput.Id) ?? inputOptions[0];
+            OutputBox.SelectedItem = Controller.Settings.FinalOutputFollowsDefault
+                ? outputOptions[0] : outputOptions.FirstOrDefault(d => d.Id == _snapshot.OutputDeviceId) ?? outputOptions[0];
+            FollowGlobalInputSwitch.Visibility = Visibility.Collapsed;
             PreserveMixerOnStartCheckBox.IsChecked = false;
             AutomationProperties.SetName(StartStopButton, _snapshot.Running ? Loc.Get("StopEngine") : Loc.Get("StartEngine"));
             await RefreshPluginsAsync();
@@ -132,6 +84,29 @@ public sealed partial class InputPluginsPage : Page
         }
     }
 
+    private async void Endpoint_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_busy || !IsLoaded || InputBox.SelectedItem is not AudioDeviceInfo inputChoice
+            || OutputBox.SelectedItem is not AudioDeviceInfo outputChoice) return;
+        _busy = true;
+        SetControlsEnabled(false);
+        try
+        {
+            var input = ResolveOption(inputChoice);
+            var output = ResolveOption(outputChoice);
+            if (_snapshot?.Running == true)
+                _snapshot = await Controller.Engine.ConfigurePipelineAsync(
+                    new EngineDeviceConfiguration(input.Name, output.Name, (int)BufferBox.Value, input.Id, output.Id),
+                    null, null, null);
+            Controller.Settings.FinalOutputFollowsDefault = outputChoice.Id == DefaultDeviceId;
+            Controller.CommitGlobalPhysicalInput(new SavedDeviceReference { Id = input.Id, Name = input.Name },
+                inputChoice.Id == DefaultDeviceId);
+            StatusBar.IsOpen = false;
+        }
+        catch (Exception ex) { ShowError(ex); }
+        finally { _busy = false; SetControlsEnabled(true); }
+    }
+
     private async void StartStopButton_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -147,6 +122,10 @@ public sealed partial class InputPluginsPage : Page
             else if (InputBox.SelectedItem is AudioDeviceInfo input
                      && OutputBox.SelectedItem is AudioDeviceInfo output)
             {
+                var followInput = input.Id == DefaultDeviceId;
+                var followOutput = output.Id == DefaultDeviceId;
+                input = ResolveOption(input);
+                output = ResolveOption(output);
                 inheritedSystemMixer = _snapshot?.MixerMode != (int)EngineMixerMode.Voice;
                 _snapshot = await Controller.Engine.StartAsync(
                     input.Name,
@@ -157,7 +136,9 @@ public sealed partial class InputPluginsPage : Page
                     preserveMixer: PreserveMixerOnStartCheckBox.IsChecked == true);
                 Controller.CommitGlobalPhysicalInput(
                     new SavedDeviceReference { Id = input.Id, Name = input.Name },
-                    FollowGlobalInputSwitch.IsOn);
+                    followInput);
+                Controller.Settings.FinalOutputFollowsDefault = followOutput;
+                Controller.Persist();
             }
             else
             {
@@ -238,7 +219,9 @@ public sealed partial class InputPluginsPage : Page
         _plugins = await Controller.Engine.GetPluginsAsync();
         var folders = await Controller.Engine.GetPluginFoldersAsync();
         ApplyPluginFilter();
+        var selectedIndex = ChainList.SelectedIndex;
         ChainList.ItemsSource = _plugins.Chain;
+        if (_plugins.Chain.Count > 0) ChainList.SelectedIndex = Math.Clamp(selectedIndex, 0, _plugins.Chain.Count - 1);
         PluginFoldersList.ItemsSource = folders.Folders;
     }
 
@@ -304,10 +287,15 @@ public sealed partial class InputPluginsPage : Page
 
     private async void OpenEditorButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ChainList.SelectedItem is not EnginePluginEntry plugin) return;
+        if (ChainList.SelectedItem is not EnginePluginEntry plugin)
+        {
+            ShowError(new InvalidOperationException(LiteralCatalog.Get("Selecciona un plugin de la cadena activa.")));
+            return;
+        }
         try
         {
             await Controller.Engine.OpenPluginEditorAsync(plugin.Index);
+            StatusBar.IsOpen = false;
         }
         catch (Exception ex)
         {
@@ -387,6 +375,17 @@ public sealed partial class InputPluginsPage : Page
         StatusBar.Severity = InfoBarSeverity.Error;
         StatusBar.IsOpen = true;
     }
+
+    private const string DefaultDeviceId = "@windows-default";
+    private static AudioDeviceInfo DefaultOption(AudioDeviceInfo? device, AudioFlow flow) => new()
+    {
+        Id = DefaultDeviceId, Flow = flow,
+        Name = $"{LiteralCatalog.Get("Predeterminado de Windows")} — {device?.Name ?? LiteralCatalog.Get("No disponible") }"
+    };
+
+    private AudioDeviceInfo ResolveOption(AudioDeviceInfo device) => device.Id != DefaultDeviceId ? device
+        : Controller.Audio.GetDevices(device.Flow).FirstOrDefault(d => d.IsDefaultMultimedia)
+          ?? throw new InvalidOperationException(LiteralCatalog.Get("No hay un dispositivo predeterminado disponible."));
 
     private static bool HasReference(SavedDeviceReference reference) =>
         !string.IsNullOrWhiteSpace(reference.Id) || !string.IsNullOrWhiteSpace(reference.Name);

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="UnifiedAudio.Views.MixerPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -13,6 +13,7 @@
                 <TextBlock Text="Configura qué llega al endpoint virtual final y cuánto aporta cada fuente." Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
             </StackPanel>
             <InfoBar x:Name="StatusBar" IsClosable="False" IsOpen="False" />
+            <InfoBar x:Name="FeedbackStatusBar" IsClosable="False" IsOpen="False" />
 
             <Grid ColumnSpacing="16" RowSpacing="12">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -54,6 +55,7 @@
                                   Header="Activar filtrado por aplicación"
                                   AutomationProperties.Name="Activar filtrado por aplicación" />
                     <ComboBox x:Name="ProcessFilterModeBox" Header="Política para aplicaciones nuevas" HorizontalAlignment="Stretch" />
+                    <InfoBar x:Name="SessionStatusBar" IsClosable="False" IsOpen="False" />
                     <TextBlock Text="Solo las marcadas: las no marcadas quedan fuera. Todas salvo las desmarcadas: las aplicaciones nuevas entran automáticamente. Cada regla se conserva aunque la aplicación se cierre."
                                Style="{StaticResource SectionBodyStyle}" TextWrapping="Wrap" />
                     <Grid ColumnSpacing="12">
@@ -94,18 +96,29 @@
             <Border Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
                 <StackPanel Spacing="10">
                     <TextBlock Text="Medidores reales" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <ProgressBar x:Name="VoiceMeter" Minimum="0" Maximum="1" AutomationProperties.Name="Nivel de voz" />
-                    <ProgressBar x:Name="SystemMeter" Minimum="0" Maximum="1" AutomationProperties.Name="Nivel de sistema" />
-                    <ProgressBar x:Name="OutputMeter" Minimum="0" Maximum="1" AutomationProperties.Name="Nivel final" />
-                    <TextBlock Text="Espectro de salida · 60 Hz–16 kHz" Style="{StaticResource CaptionTextBlockStyle}" />
-                    <Canvas x:Name="SpectrumCanvas" Height="96" SizeChanged="SpectrumCanvas_SizeChanged" AutomationProperties.Name="Espectro de salida de 16 bandas">
-                        <Polyline x:Name="SpectrumLine" Stroke="{ThemeResource AccentFillColorDefaultBrush}" StrokeThickness="2" />
-                    </Canvas>
+                    <TextBlock Text="Los cambios se aplican automáticamente. Voz: micrófono procesado. PC: salida seleccionada. Final: audio enviado al micrófono virtual." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                    <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Voz procesada"/><TextBlock x:Name="VoiceMeterText" Grid.Column="1" FontFamily="Consolas"/>
+                    </Grid>
+                    <ProgressBar x:Name="VoiceMeter" Minimum="0" Maximum="1" Height="12" Foreground="#4C8DFF" AutomationProperties.Name="Voz procesada" />
+                    <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Audio del PC"/><TextBlock x:Name="SystemMeterText" Grid.Column="1" FontFamily="Consolas"/>
+                    </Grid>
+                    <ProgressBar x:Name="SystemMeter" Minimum="0" Maximum="1" Height="12" Foreground="#BB86FC" AutomationProperties.Name="Audio del PC" />
+                    <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Salida final"/><TextBlock x:Name="OutputMeterText" Grid.Column="1" FontFamily="Consolas"/>
+                    </Grid>
+                    <ProgressBar x:Name="OutputMeter" Minimum="0" Maximum="1" Height="12" Foreground="#35B88F" AutomationProperties.Name="Salida final" />
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="−60 dB · Silencio" Style="{StaticResource CaptionTextBlockStyle}"/>
+                        <TextBlock Grid.Column="1" Text="−30 dB" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"/>
+                        <TextBlock Grid.Column="2" Text="0 dB · Límite" HorizontalAlignment="Right" Style="{StaticResource CaptionTextBlockStyle}"/>
+                    </Grid>
                     <TextBlock x:Name="TelemetryText" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
-            <Button x:Name="ApplyButton" Content="Aplicar al motor" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Left" Click="ApplyButton_Click" />
+
         </StackPanel>
     </ScrollViewer>
 </Page>

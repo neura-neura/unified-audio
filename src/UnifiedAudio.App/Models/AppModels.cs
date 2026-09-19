@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace UnifiedAudio.Models;
 
@@ -340,7 +340,7 @@ public sealed class AppSettings
     public bool RestoreWindowsDefaultsOnExit { get; set; }
     public bool ShowNotifications { get; set; } = true;
     public bool LaunchMinimized { get; set; }
-    public GlobalInputMode GlobalInputMode { get; set; } = GlobalInputMode.Unconfigured;
+    public GlobalInputMode GlobalInputMode { get; set; } = GlobalInputMode.FollowWindowsDefault;
     public SavedDeviceReference GlobalPhysicalInput { get; set; } = new();
     public StartupGateMode StartupGate { get; set; }
     public int StartupDelaySeconds { get; set; }
@@ -348,10 +348,10 @@ public sealed class AppSettings
     public int StartupWaitTimeoutSeconds { get; set; } = 180;
     public bool WriteDetailedLogs { get; set; }
     public bool PlayMuteFeedbackSounds { get; set; } = true;
-    public string MuteSoundPath { get; set; } = string.Empty;
-    public string UnmuteSoundPath { get; set; } = string.Empty;
-    public string PttOnSoundPath { get; set; } = string.Empty;
-    public string PttOffSoundPath { get; set; } = string.Empty;
+    public string MuteSoundPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "mute.wav");
+    public string UnmuteSoundPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "unmute.wav");
+    public string PttOnSoundPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "ptt_on.wav");
+    public string PttOffSoundPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", "ptt_off.wav");
     public int MuteSoundVolumePercent { get; set; } = 100;
     public int UnmuteSoundVolumePercent { get; set; } = 100;
     public int PttOnSoundVolumePercent { get; set; } = 100;
@@ -361,7 +361,9 @@ public sealed class AppSettings
     public bool ShowMuteOsd { get; set; } = true;
     public int MuteOsdDurationMilliseconds { get; set; } = 1000;
     public bool ShowMuteOverlay { get; set; }
-    public float OverlayActivityThresholdDb { get; set; } = -36.0f;
+    public bool FinalOutputFollowsDefault { get; set; } = true;
+    public bool SystemAudioFollowsDefault { get; set; } = true;
+    public float OverlayActivityThresholdDb { get; set; } = -40.0f;
     public bool OverlayLocked { get; set; } = true;
     public int OverlayScalePercent { get; set; } = 100;
     public int OverlayOpacityPercent { get; set; } = 100;

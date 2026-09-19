@@ -1,11 +1,11 @@
-Unicode true
+﻿Unicode true
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
 !include "FileFunc.nsh"
 
 !define PRODUCT_NAME "UnifiedAudio"
-!define PRODUCT_VERSION "0.1.0"
+!define PRODUCT_VERSION "0.1.4"
 !define PRODUCT_PUBLISHER "UnifiedAudio contributors"
 !define PRODUCT_WEB_SITE "https://github.com/neura-neura/unified-audio"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\UnifiedAudio.exe"

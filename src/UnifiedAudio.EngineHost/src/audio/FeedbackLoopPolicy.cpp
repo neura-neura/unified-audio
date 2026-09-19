@@ -25,19 +25,18 @@ FeedbackLoopDecision evaluateFeedbackLoop (const FeedbackLoopEvidence& evidence)
         return { true, "Windows audio endpoint/Listen state could not be verified safely" };
     }
 
-    // Process loopback is endpoint-independent: it can capture an app that
-    // reads the final cable capture and renders it back to the selected
-    // system endpoint. Endpoint-full loopback has no exclusion boundary, and
-    // a process filter is safe only after every active consumer tree has been
-    // proven absent from the slots that will be created.
-    if (evidence.systemRouteRequired && evidence.finalVirtualCable
+    // A microphone consumer alone does not prove a return route: normal call
+    // and recording apps must be able to receive Both. Endpoint loopback is
+    // guarded by the actual endpoint/Listen routes below. Process-tree capture
+    // is endpoint-independent, so retain its explicit receiver exclusions.
+    if (evidence.systemRouteRequired && evidence.processFilterEnabled && evidence.finalVirtualCable
         && ! evidence.finalCaptureConsumerProbeAvailable)
     {
         return { true,
                  "consumers of the final cable capture could not be enumerated safely" };
     }
-    if (evidence.systemRouteRequired && evidence.finalCaptureConsumerDetected
-        && (! evidence.processFilterEnabled || ! evidence.finalCaptureConsumersExcluded))
+    if (evidence.systemRouteRequired && evidence.processFilterEnabled
+        && evidence.finalCaptureConsumerDetected && ! evidence.finalCaptureConsumersExcluded)
     {
         return { true,
                  "an active process consumes the final cable capture and is not excluded from system capture" };

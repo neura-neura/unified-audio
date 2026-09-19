@@ -1,4 +1,4 @@
-using UnifiedAudio.Models;
+﻿using UnifiedAudio.Models;
 using UnifiedAudio.Views;
 using Microsoft.UI.Dispatching;
 using UnifiedAudio.Interop;
@@ -20,6 +20,7 @@ public sealed class MuteFeedbackService : IDisposable
     private MuteOsdWindow? _osd;
     private MuteOverlayWindow? _overlay;
     private bool _polling;
+    private readonly UnifiedAudio.Core.Audio.SpeechActivityIndicator _activity = new();
     private bool _disposed;
     private DateTimeOffset _manualOverlayRevealUntil;
     private readonly object _playersLock = new();
@@ -145,8 +146,10 @@ public sealed class MuteFeedbackService : IDisposable
     private void UpdateOverlay(EngineSnapshot snapshot)
     {
         if (_overlay is null) return;
-        var peakDb = snapshot.VoicePeak <= 0 ? -160.0 : 20.0 * Math.Log10(snapshot.VoicePeak);
-        _overlay.UpdateState(snapshot.MutedRequested, !snapshot.MutedRequested && peakDb >= _settings.OverlayActivityThresholdDb);
+        // Indicate microphone activity before RNNoise/gates can suppress it.
+        var speaking = _activity.Update(snapshot.InputPeak, _settings.OverlayActivityThresholdDb,
+            snapshot.MutedRequested, snapshot.Running, Environment.TickCount64);
+        _overlay.UpdateState(snapshot.MutedRequested, speaking, snapshot.Running);
         var visibleForState = _settings.OverlayVisibility switch
         {
             OverlayVisibilityMode.MutedOnly => snapshot.MutedRequested,
@@ -189,6 +192,12 @@ public sealed class MuteFeedbackService : IDisposable
             (false, true) => _settings.MuteSoundPath,
             _ => _settings.UnmuteSoundPath
         };
+        if (string.IsNullOrWhiteSpace(customPath))
+            customPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds", (ptt, muted) switch
+            {
+                (true, true) => "ptt_off.wav", (true, false) => "ptt_on.wav",
+                (false, true) => "mute.wav", _ => "unmute.wav"
+            });
         var volumePercent = (ptt, muted) switch
         {
             (true, true) => _settings.PttOffSoundVolumePercent,

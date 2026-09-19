@@ -37,6 +37,9 @@ public static class EngineFrameCodec
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
+    public static JsonElement SerializePayload<T>(T payload) =>
+        JsonSerializer.SerializeToElement(payload, JsonOptions);
+
     public static byte[] Encode(EngineMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);

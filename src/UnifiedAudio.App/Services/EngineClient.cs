@@ -397,8 +397,14 @@ public sealed class EngineClient : IAsyncDisposable
     public async Task<EngineSnapshot> SetPluginBypassAsync(int index, bool bypassed, CancellationToken cancellationToken = default) =>
         DeserializePayload<EngineSnapshot>(await SendAsync("plugin.bypass", new { index, bypassed }, cancellationToken).ConfigureAwait(false));
 
-    public async Task<EngineSnapshot> OpenPluginEditorAsync(int index, CancellationToken cancellationToken = default) =>
-        DeserializePayload<EngineSnapshot>(await SendAsync("plugin.openEditor", new { index }, cancellationToken).ConfigureAwait(false));
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(uint processId);
+
+    public async Task<EngineSnapshot> OpenPluginEditorAsync(int index, CancellationToken cancellationToken = default)
+    {
+        if (_process is { HasExited: false }) AllowSetForegroundWindow((uint)_process.Id);
+        return DeserializePayload<EngineSnapshot>(await SendAsync("plugin.openEditor", new { index }, cancellationToken).ConfigureAwait(false));
+    }
 
     public async Task<EngineSnapshot> AddPluginFolderAsync(string folder, CancellationToken cancellationToken = default) =>
         DeserializePayload<EngineSnapshot>(await SendAsync("plugin.folder.add", new { folder }, cancellationToken).ConfigureAwait(false));
@@ -429,7 +435,7 @@ public sealed class EngineClient : IAsyncDisposable
                 Sequence = Interlocked.Increment(ref _sequence),
                 Kind = EngineMessageKind.Command,
                 Name = name,
-                Payload = JsonSerializer.SerializeToElement(payload)
+                Payload = EngineFrameCodec.SerializePayload(payload)
             };
             var frame = EngineFrameCodec.Encode(request);
             await _pipe.WriteAsync(frame, cancellationToken).ConfigureAwait(false);

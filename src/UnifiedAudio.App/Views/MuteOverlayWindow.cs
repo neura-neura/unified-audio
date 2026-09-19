@@ -1,658 +1,226 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.UI;
+using UnifiedAudio.Core.Audio;
+using UnifiedAudio.Helpers;
 using UnifiedAudio.Interop;
 using UnifiedAudio.Models;
-using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
-using Microsoft.UI.Xaml.Input;
-using Windows.Graphics;
-using Microsoft.UI;
-using UnifiedAudio.Helpers;
-using System.Runtime.InteropServices;
+using Windows.UI;
 
 namespace UnifiedAudio.Views;
 
-public sealed class MuteOverlayWindow : Window, IDisposable
+// Every visible pixel is a premultiplied-alpha circle. There is no WinUI
+// backing surface, window frame, clipped white matte, or second ellipse.
+public sealed class MuteOverlayWindow : IDisposable
 {
-    private const int BaseWindowDiameter = 64;
-    private const int BaseCircleDiameter = 48;
-    private const int CircleInset = 8;
-
-    private readonly Grid _surface;
-    private readonly Viewbox _circleViewport;
-    private readonly Ellipse _circle;
+    private readonly string _className = "UnifiedAudio.Overlay." + Guid.NewGuid().ToString("N");
+    private readonly NativeMethods.WndProc _windowProc;
+    private readonly nint _instance = NativeMethods.GetModuleHandle(null);
+    private nint _hwnd;
     private AppSettings? _settings;
-    private bool _applyingPlacement;
-    private bool _disposed;
-    private bool _subclassInstalled;
-    private nint _previousWndProc;
-    private NativeMethods.WndProc? _wndProcDelegate;
-    private bool _isResizing;
-    private int _resizeHitTest;
-    private NativeMethods.Point _resizeStartCursor;
-    private PointInt32 _resizeStartPosition;
-    private SizeInt32 _resizeStartSize;
-    private int _lastHitTest;
-    private int _lastHitScreenX;
-    private int _lastHitScreenY;
-
+    private int _size = 64;
+    private bool _visible, _dragging, _resizing, _muted, _speaking, _running;
+    private NativeMethods.Point _startCursor;
+    private NativeMethods.Rect _startRect;
+    private Color _color = Colors.DimGray;
+    private (int Size, Color Color, int Opacity)? _painted;
     public Action<string, double, double>? PlacementChanged { get; set; }
+    internal nint Handle => _hwnd;
+    private bool IsLocked => _settings?.OverlayLocked ?? true;
 
     public MuteOverlayWindow()
     {
-        // The overlay is deliberately borderless in both modes. Unlocked
-        // movement/resizing is provided by WM_NCHITTEST below, so the native
-        // caption can never introduce a titlebar or a rectangular frame.
-        Title = string.Empty;
-        ExtendsContentIntoTitleBar = false;
-
-        _circle = new Ellipse
+        _windowProc = WindowProc;
+        var wc = new NativeMethods.WndClassEx
         {
-            Width = BaseCircleDiameter,
-            Height = BaseCircleDiameter,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Stretch = Stretch.Fill
+            cbSize = (uint)Marshal.SizeOf<NativeMethods.WndClassEx>(),
+            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_windowProc),
+            hInstance = _instance, lpszClassName = _className
         };
-        _circleViewport = new Viewbox
-        {
-            Stretch = Stretch.Uniform,
-            Margin = new Thickness(CircleInset),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Child = _circle
-        };
-        _surface = new Grid
-        {
-            Background = new SolidColorBrush(Colors.Transparent),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        _surface.Children.Add(_circleViewport);
-        Content = _surface;
-        _surface.PointerPressed += Surface_PointerPressed;
-        _surface.PointerMoved += Surface_PointerMoved;
-        _surface.PointerReleased += Surface_PointerReleased;
-        _surface.PointerCanceled += Surface_PointerCanceled;
-
-        // There is intentionally no visible label or glyph. Keep the state
-        // available to UI Automation whenever the overlay is unlocked.
-        AutomationProperties.SetAutomationId(_surface, "MuteOverlayState");
-        AutomationProperties.SetName(_surface, LiteralCatalog.Get("Estado del micrófono"));
-        AutomationProperties.SetAutomationId(_circle, "MuteOverlayCircle");
-
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsResizable = false;
-            presenter.IsMinimizable = false;
-            presenter.IsMaximizable = false;
-        }
-        AppWindow.Resize(new SizeInt32(BaseWindowDiameter, BaseWindowDiameter));
-        UpdateCircleLayout();
-
-        // The subclass is installed once and kept alive by the field. Returning
-        // HTTRANSPARENT from the top-level WndProc is what makes locked input
-        // pass through to a window owned by another thread/process; the
-        // WS_EX_TRANSPARENT bit alone only affects paint ordering.
-        InstallWndProcSubclass();
-        Closed += OverlayWindow_Closed;
-
-        // Give an immediately enabled overlay a meaningful accessible state
-        // while the first engine snapshot is still in flight.
-        UpdateState(muted: false, speaking: false, engineAvailable: true);
-        ApplyLockedStyle();
-        MoveToTopRight();
-        AppWindow.Changed += AppWindow_Changed;
+        if (NativeMethods.RegisterClassEx(ref wc) == 0) throw new Win32Exception();
+        _hwnd = NativeMethods.CreateWindowEx(
+            NativeMethods.WsExLayered | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate,
+            _className, "UnifiedAudio microphone status", unchecked((int)0x80000000),
+            0, 0, _size, _size, 0, 0, _instance, 0);
+        if (_hwnd == 0) { UnregisterClass(_className, _instance); throw new Win32Exception(); }
+        int noRounding = 1, noBorder = -2;
+        DwmSetWindowAttribute(_hwnd, 33, ref noRounding, sizeof(int));
+        DwmSetWindowAttribute(_hwnd, 34, ref noBorder, sizeof(int));
+        Paint();
     }
 
     public void ApplySettings(AppSettings settings)
     {
+        if (_hwnd == 0) return;
         _settings = settings;
-        var scale = Math.Clamp(settings.OverlayScalePercent, 50, 300) / 100.0;
-        var diameter = (int)Math.Round(BaseWindowDiameter * scale);
-        AppWindow.Resize(new SizeInt32(diameter, diameter));
-        ApplyCircleOpacity();
-        UpdateCircleLayout();
-        ApplyLockedStyle();
+        _size = (int)Math.Round(64 * Math.Clamp(settings.OverlayScalePercent, 50, 300) / 100.0);
+        var styles = NativeMethods.WsExLayered | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
+        if (IsLocked) styles |= NativeMethods.WsExTransparent;
+        NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GwlExStyle, new nint(styles));
         MoveToConfiguredPosition();
+        UpdateState(_muted, _speaking, _running);
     }
 
     public void UpdateState(bool muted, bool speaking, bool engineAvailable = true)
     {
-        var stateName = !engineAvailable
-            ? Loc.Get("EngineUnavailable")
-            : muted
-                ? LiteralCatalog.Get("Muteado")
-                : speaking
-                    ? LiteralCatalog.Get("Hablando")
-                    : LiteralCatalog.Get("Micrófono activo");
-        var color = !engineAvailable
-            ? UiColor.Parse(_settings?.OverlayIdleColor, Colors.DimGray)
-            : muted
-                ? UiColor.Parse(_settings?.OverlayMutedColor, Colors.DarkRed)
-                : speaking
-                    ? UiColor.Parse(_settings?.OverlaySpeakingColor, Colors.ForestGreen)
-                    : UiColor.Parse(_settings?.OverlayIdleColor, Colors.DimGray);
-
-        _circle.Fill = new SolidColorBrush(color);
-        ApplyCircleOpacity();
-        var accessibleName = string.Format(LiteralCatalog.Get("Micrófono: {0}"), stateName);
-        AutomationProperties.SetName(_surface, accessibleName);
-        AutomationProperties.SetName(_circle, accessibleName);
+        if (_hwnd == 0) return;
+        _muted = muted; _speaking = speaking; _running = engineAvailable;
+        _color = !engineAvailable ? UiColor.Parse(_settings?.OverlayIdleColor, Colors.DimGray)
+            : muted ? UiColor.Parse(_settings?.OverlayMutedColor, Colors.DarkRed)
+            : speaking ? UiColor.Parse(_settings?.OverlaySpeakingColor, Colors.ForestGreen)
+            : UiColor.Parse(_settings?.OverlayIdleColor, Colors.DimGray);
+        var label = !engineAvailable ? Loc.Get("EngineUnavailable") : muted ? LiteralCatalog.Get("Muteado")
+            : speaking ? LiteralCatalog.Get("Hablando") : LiteralCatalog.Get("Micrófono activo");
+        SetWindowText(_hwnd, string.Format(LiteralCatalog.Get("Micrófono: {0}"), label));
+        Paint();
     }
 
     public void SetVisible(bool visible)
     {
-        if (_disposed) return;
+        if (_hwnd == 0) return;
         if (visible)
         {
-            // SetVisible is called from the 250 ms refresh loop. Re-applying the
-            // saved position on every tick would undo an unlocked drag and made
-            // an off-screen window impossible to recover reliably.
-            ApplyLockedStyle();
-            if (!IsOnScreen())
-                MoveToConfiguredPosition();
-            AppWindow.Show(false);
-            AppWindow.MoveInZOrderAtTop();
-            EnsureTopmost(show: true);
+            if (!IsOnScreen()) MoveToConfiguredPosition();
+            NativeMethods.SetWindowPos(_hwnd, NativeMethods.HwndTopmost, 0, 0, 0, 0,
+                NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpShowWindow);
         }
-        else
-        {
-            AppWindow.Hide();
-        }
+        else if (_visible) NativeMethods.ShowWindow(_hwnd, 0);
+        _visible = visible;
     }
 
-    private void MoveToTopRight()
+    private NativeMethods.MonitorDescriptor CurrentMonitor()
     {
-        var monitor = GetCurrentMonitor();
-        var work = monitor;
-        var size = AppWindow.Size;
-        var x = Math.Max(work.X, work.X + work.Width - size.Width - 20);
-        var y = Math.Max(work.Y, work.Y + 20);
-        MoveWindow(x, y);
+        var monitors = NativeMethods.EnumerateMonitors();
+        if (monitors.Count == 0) throw new InvalidOperationException("No display is available.");
+        NativeMethods.GetWindowRect(_hwnd, out var r);
+        return monitors.FirstOrDefault(m => r.Left + _size / 2 >= m.Monitor.Left
+            && r.Left + _size / 2 < m.Monitor.Right && r.Top + _size / 2 >= m.Monitor.Top
+            && r.Top + _size / 2 < m.Monitor.Bottom, monitors.FirstOrDefault(m => m.IsPrimary, monitors[0]));
     }
 
     private void MoveToConfiguredPosition()
     {
-        if (_settings is null) { MoveToTopRight(); return; }
-        var monitor = FindMonitor(_settings.OverlayMonitorId) ?? GetCurrentMonitor();
-        var work = monitor;
-        var placement = !string.IsNullOrWhiteSpace(monitor.Id)
-            && _settings.OverlayMonitorPlacements.TryGetValue(monitor.Id, out var saved)
-                ? saved
-                : new OverlayMonitorPlacement
-                {
-                    RelativeX = _settings.OverlayRelativeX,
-                    RelativeY = _settings.OverlayRelativeY
-                };
-        var size = AppWindow.Size;
-        var availableX = Math.Max(0, work.Width - size.Width);
-        var availableY = Math.Max(0, work.Height - size.Height);
-        var x = work.X + (int)Math.Round(availableX * Math.Clamp(placement.RelativeX, 0.0, 1.0));
-        var y = work.Y + (int)Math.Round(availableY * Math.Clamp(placement.RelativeY, 0.0, 1.0));
-        MoveWindow(x, y);
-    }
-
-    private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
-    {
-        if (args.DidSizeChange == true)
-        {
-            UpdateCircleLayout();
-            ApplyCircleRegion(WinRT.Interop.WindowNative.GetWindowHandle(this));
-        }
-        if (_applyingPlacement || _settings?.OverlayLocked != false
-            || (args.DidPositionChange != true && args.DidSizeChange != true)) return;
-        var monitor = GetCurrentMonitor();
-        var work = monitor;
-        var size = AppWindow.Size;
-        var availableX = Math.Max(1, work.Width - size.Width);
-        var availableY = Math.Max(1, work.Height - size.Height);
-        var x = Math.Clamp((AppWindow.Position.X - work.X) / (double)availableX, 0.0, 1.0);
-        var y = Math.Clamp((AppWindow.Position.Y - work.Y) / (double)availableY, 0.0, 1.0);
-        if (args.DidSizeChange == true)
-            _settings.OverlayScalePercent = Math.Clamp((int)Math.Round(AppWindow.Size.Width / (double)BaseWindowDiameter * 100.0), 50, 300);
-        PlacementChanged?.Invoke(monitor.Id, x, y);
-    }
-
-    private MonitorWorkArea GetCurrentMonitor()
-    {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var handle = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MonitorDefaultToNearest);
-        return ReadMonitor(handle) ?? new MonitorWorkArea(string.Empty, 0, 0, 1920, 1080);
-    }
-
-    private static MonitorWorkArea? FindMonitor(string id)
-    {
-        if (string.IsNullOrWhiteSpace(id)) return null;
-        MonitorWorkArea? match = null;
-        NativeMethods.MonitorEnumProc callback = (monitor, _, _, _) =>
-        {
-            var candidate = ReadMonitor(monitor);
-            if (candidate is not null && string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase))
-                match = candidate;
-            return match is null;
-        };
-        NativeMethods.EnumDisplayMonitors(nint.Zero, nint.Zero, callback, nint.Zero);
-        GC.KeepAlive(callback);
-        return match;
-    }
-
-    private static MonitorWorkArea? ReadMonitor(nint handle)
-    {
-        if (handle == nint.Zero) return null;
-        var info = new NativeMethods.MonitorInfoEx
-        {
-            Size = (uint)Marshal.SizeOf<NativeMethods.MonitorInfoEx>(),
-            Device = string.Empty
-        };
-        if (!NativeMethods.GetMonitorInfo(handle, ref info)) return null;
-        return new MonitorWorkArea(
-            info.Device,
-            info.Work.Left,
-            info.Work.Top,
-            info.Work.Right - info.Work.Left,
-            info.Work.Bottom - info.Work.Top);
-    }
-
-    private sealed record MonitorWorkArea(string Id, int X, int Y, int Width, int Height);
-
-    private void MoveWindow(int x, int y)
-    {
-        _applyingPlacement = true;
-        try
-        {
-            AppWindow.Move(new PointInt32(x, y));
-        }
-        finally
-        {
-            _applyingPlacement = false;
-        }
+        var monitor = NativeMethods.EnumerateMonitors().FirstOrDefault(
+            m => string.Equals(m.Id, _settings?.OverlayMonitorId, StringComparison.OrdinalIgnoreCase), CurrentMonitor());
+        var x = _settings?.OverlayRelativeX ?? 0.95;
+        var y = _settings?.OverlayRelativeY ?? 0.05;
+        if (!string.IsNullOrWhiteSpace(_settings?.OverlayMonitorId)
+            && _settings.OverlayMonitorPlacements.TryGetValue(monitor.Id, out var saved))
+        { x = saved.RelativeX; y = saved.RelativeY; }
+        Move(monitor.Work.Left + (int)Math.Round(Math.Max(0, monitor.Work.Right - monitor.Work.Left - _size) * Math.Clamp(x, 0, 1)),
+             monitor.Work.Top + (int)Math.Round(Math.Max(0, monitor.Work.Bottom - monitor.Work.Top - _size) * Math.Clamp(y, 0, 1)));
+        Paint();
     }
 
     private bool IsOnScreen()
     {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd == nint.Zero || !NativeMethods.GetWindowRect(hwnd, out var rect)) return false;
-        return NativeMethods.EnumerateMonitors().Any(monitor =>
-            rect.Right > monitor.Monitor.Left
-            && rect.Left < monitor.Monitor.Right
-            && rect.Bottom > monitor.Monitor.Top
-            && rect.Top < monitor.Monitor.Bottom);
+        if (!NativeMethods.GetWindowRect(_hwnd, out var r)) return false;
+        return NativeMethods.EnumerateMonitors().Any(m => r.Right > m.Work.Left && r.Left < m.Work.Right
+            && r.Bottom > m.Work.Top && r.Top < m.Work.Bottom);
     }
+    private void Move(int x, int y) => NativeMethods.SetWindowPos(_hwnd, NativeMethods.HwndTopmost,
+        x, y, _size, _size, NativeMethods.SwpNoActivate);
 
-    private void EnsureTopmost(bool show)
+    private void SavePlacement()
     {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd == nint.Zero) return;
-        var flags = NativeMethods.SwpNoMove
-            | NativeMethods.SwpNoSize
-            | NativeMethods.SwpNoActivate
-            | (show ? NativeMethods.SwpShowWindow : 0u);
-        NativeMethods.SetWindowPos(hwnd, NativeMethods.HwndTopmost, 0, 0, 0, 0, flags);
-    }
-
-    private void ApplyLockedStyle()
-    {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd == nint.Zero) return;
-        var style = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GwlExStyle).ToInt64();
-        var locked = _settings?.OverlayLocked ?? true;
-        // WS_EX_LAYERED keeps the root surface genuinely transparent outside
-        // the ellipse. WS_EX_TRANSPARENT remains useful for paint ordering,
-        // while WM_NCHITTEST below provides the actual input pass-through.
-        var baseStyle = style
-            | NativeMethods.WsExToolWindow
-            | NativeMethods.WsExLayered;
-        var newStyle = locked
-            ? baseStyle | NativeMethods.WsExNoActivate | NativeMethods.WsExTransparent
-            : baseStyle & ~NativeMethods.WsExNoActivate & ~NativeMethods.WsExTransparent;
-        NativeMethods.SetWindowLongPtr(
-            hwnd,
-            NativeMethods.GwlExStyle,
-            new nint(newStyle));
-        NativeMethods.SetWindowPos(
-            hwnd,
-            NativeMethods.HwndTopmost,
-            0,
-            0,
-            0,
-            0,
-            NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate
-                | NativeMethods.SwpFrameChanged);
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            // Never expose a caption, border, or resize frame: these would
-            // render a rectangular window around the state circle. Native
-            // hit-testing below still makes the borderless window draggable
-            // and resizable while unlocked.
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsResizable = !locked;
-            presenter.IsMinimizable = false;
-            presenter.IsMaximizable = false;
-        }
-        var windowStyle = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GwlStyle).ToInt64();
-        windowStyle = locked
-            ? windowStyle & ~NativeMethods.WsThickFrame
-            : windowStyle | NativeMethods.WsThickFrame;
-        NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GwlStyle, new nint(windowStyle));
-        UpdateCircleLayout();
-        // Keep the region in both modes. Clearing it when unlocked exposed a
-        // rectangular WinUI surface (and any compositor backdrop) outside the
-        // circle. SetWindowRgn clips that surface at the native level.
-        ApplyCircleRegion(hwnd);
-    }
-
-    private void UpdateCircleLayout()
-    {
-        var size = AppWindow.Size;
-        var scale = Math.Min(size.Width, size.Height) / (double)BaseWindowDiameter;
-        _circleViewport.Margin = new Thickness(CircleInset * Math.Max(0.01, scale));
-    }
-
-    private void ApplyCircleOpacity()
-    {
-        _circle.Opacity = Math.Clamp(_settings?.OverlayOpacityPercent ?? 100, 10, 100) / 100.0;
-    }
-
-    private static void ApplyCircleRegion(nint hwnd)
-    {
-        if (!NativeMethods.GetClientRect(hwnd, out var client)) return;
-        var width = Math.Max(1, client.Right - client.Left);
-        var height = Math.Max(1, client.Bottom - client.Top);
-        var scale = Math.Min(width, height) / (double)BaseWindowDiameter;
-        var inset = Math.Max(0, (int)Math.Round(CircleInset * scale));
-        var diameter = Math.Max(1, Math.Min(width, height) - 2 * inset);
-        var left = (width - diameter) / 2;
-        var top = (height - diameter) / 2;
-        var region = NativeMethods.CreateEllipticRgn(left, top, left + diameter, top + diameter);
-        if (region == nint.Zero) return;
-        if (NativeMethods.SetWindowRgn(hwnd, region, true) == 0)
-            NativeMethods.DeleteObject(region);
-    }
-
-    private bool IsLocked => _settings?.OverlayLocked ?? true;
-
-    private static int UnpackScreenCoordinate(nint packed, bool y)
-    {
-        var value = packed.ToInt64();
-        return unchecked((short)((value >> (y ? 16 : 0)) & 0xFFFF));
-    }
-
-    private nint GetUnlockedHitTest(nint hwnd, int screenX, int screenY)
-    {
-        if (!NativeMethods.GetWindowRect(hwnd, out var windowRect))
-            return new nint(NativeMethods.HtClient);
-
-        var x = screenX - windowRect.Left;
-        var y = screenY - windowRect.Top;
-        if (!NativeMethods.GetClientRect(hwnd, out var client))
-            return new nint(NativeMethods.HtClient);
-
-        var width = Math.Max(1, client.Right - client.Left);
-        var height = Math.Max(1, client.Bottom - client.Top);
-        var scale = Math.Min(width, height) / (double)BaseWindowDiameter;
-        var inset = Math.Max(0, (int)Math.Round(CircleInset * scale));
-        var grip = Math.Clamp((int)Math.Round(8 * scale), 6, 12);
-        var left = inset;
-        var top = inset;
-        var right = width - inset - 1;
-        var bottom = height - inset - 1;
-        var nearLeft = x <= left + grip;
-        var nearRight = x >= right - grip;
-        var nearTop = y <= top + grip;
-        var nearBottom = y >= bottom - grip;
-
-        if (nearTop && nearLeft) return new nint(NativeMethods.HtTopLeft);
-        if (nearTop && nearRight) return new nint(NativeMethods.HtTopRight);
-        if (nearBottom && nearLeft) return new nint(NativeMethods.HtBottomLeft);
-        if (nearBottom && nearRight) return new nint(NativeMethods.HtBottomRight);
-        if (nearLeft) return new nint(NativeMethods.HtLeft);
-        if (nearRight) return new nint(NativeMethods.HtRight);
-        if (nearTop) return new nint(NativeMethods.HtTop);
-        if (nearBottom) return new nint(NativeMethods.HtBottom);
-        return new nint(NativeMethods.HtCaption);
-    }
-
-    private void InstallWndProcSubclass()
-    {
-        if (_subclassInstalled) return;
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd == nint.Zero) return;
-
-        _wndProcDelegate = WindowProc;
-        var previous = NativeMethods.SetWindowLongPtr(
-            hwnd,
-            NativeMethods.GwlpWndProc,
-            Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
-        if (previous == nint.Zero)
-        {
-            _wndProcDelegate = null;
-            return;
-        }
-
-        _previousWndProc = previous;
-        _subclassInstalled = true;
+        if (_settings is null || !NativeMethods.GetWindowRect(_hwnd, out var r)) return;
+        var m = CurrentMonitor();
+        var x = Math.Clamp((r.Left - m.Work.Left) / (double)Math.Max(1, m.Work.Right - m.Work.Left - _size), 0, 1);
+        var y = Math.Clamp((r.Top - m.Work.Top) / (double)Math.Max(1, m.Work.Bottom - m.Work.Top - _size), 0, 1);
+        _settings.OverlayScalePercent = (int)Math.Round(_size / 64.0 * 100);
+        PlacementChanged?.Invoke(m.Id, x, y);
     }
 
     private nint WindowProc(nint hwnd, uint message, nint wParam, nint lParam)
     {
-        if (IsLocked && message == NativeMethods.WmNcHitTest)
-            return new nint(NativeMethods.HtTransparent);
-        if (IsLocked && message == NativeMethods.WmMouseActivate)
-            return new nint(NativeMethods.MaNoActivate);
-        if (!IsLocked && message == NativeMethods.WmNcHitTest)
+        if (message == NativeMethods.WmNcHitTest)
+            return new nint(IsLocked ? NativeMethods.HtTransparent : NativeMethods.HtClient);
+        if (message == NativeMethods.WmMouseActivate) return new nint(NativeMethods.MaNoActivate);
+        if (message == NativeMethods.WmLButtonDown && !IsLocked && NativeMethods.GetCursorPos(out _startCursor))
         {
-            var hitTest = GetUnlockedHitTest(
-                hwnd,
-                UnpackScreenCoordinate(lParam, y: false),
-                UnpackScreenCoordinate(lParam, y: true));
-            _lastHitTest = hitTest.ToInt32();
-            _lastHitScreenX = UnpackScreenCoordinate(lParam, y: false);
-            _lastHitScreenY = UnpackScreenCoordinate(lParam, y: true);
-            // Let WinUI deliver client PointerPressed on the invisible rim so
-            // the manual resize path can capture it. The interior remains a
-            // native caption hit-test for drag; returning HTLEFT/HTRIGHT here
-            // makes the borderless WinUI frame consume the message as a move.
-            return IsResizeHitTest(_lastHitTest) ? new nint(NativeMethods.HtClient) : hitTest;
+            NativeMethods.GetWindowRect(hwnd, out _startRect);
+            var x = _startCursor.X - _startRect.Left - _size / 2.0;
+            var y = _startCursor.Y - _startRect.Top - _size / 2.0;
+            _resizing = Math.Sqrt(x * x + y * y) >= _size * 0.375 - 5;
+            _dragging = !_resizing;
+            NativeMethods.SetCapture(hwnd);
+            return 0;
         }
-        if (!IsLocked && message == NativeMethods.WmNcLButtonDown
-            && NativeMethods.GetCursorPos(out var ncCursor)
-            && IsResizeHitTest(GetUnlockedHitTest(hwnd, ncCursor.X, ncCursor.Y).ToInt32()))
+        if (message == NativeMethods.WmMouseMove && (_dragging || _resizing) && NativeMethods.GetCursorPos(out var cursor))
         {
-            var resizeHitTest = GetUnlockedHitTest(hwnd, ncCursor.X, ncCursor.Y).ToInt32();
-            BeginResize(resizeHitTest, ncCursor.X, ncCursor.Y, hwnd);
-            return nint.Zero;
-        }
-        if (!IsLocked && message == NativeMethods.WmLButtonDown
-            && NativeMethods.GetCursorPos(out var clientCursor))
-        {
-            var clientHitTest = GetUnlockedHitTest(hwnd, clientCursor.X, clientCursor.Y).ToInt32();
-            if (IsResizeHitTest(clientHitTest))
+            var dx = cursor.X - _startCursor.X;
+            var dy = cursor.Y - _startCursor.Y;
+            if (_dragging) Move(_startRect.Left + dx, _startRect.Top + dy);
+            else
             {
-                BeginResize(clientHitTest, clientCursor.X, clientCursor.Y, hwnd);
-                return nint.Zero;
+                _size = Math.Clamp(_startRect.Right - _startRect.Left + (Math.Abs(dx) >= Math.Abs(dy) ? dx : dy), 32, 192);
+                Move(_startRect.Left, _startRect.Top);
+                Paint();
             }
+            return 0;
         }
-        if (_isResizing && message == NativeMethods.WmMouseMove)
+        if (message == NativeMethods.WmLButtonUp && (_dragging || _resizing))
         {
-            if (NativeMethods.GetCursorPos(out var cursor))
-                ResizeFromCursor(cursor);
-            return nint.Zero;
+            _dragging = _resizing = false;
+            NativeMethods.ReleaseCapture();
+            SavePlacement();
+            return 0;
         }
-        if (_isResizing && message == NativeMethods.WmLButtonUp)
+        if (message == 0x0215) { _dragging = _resizing = false; }
+        return NativeMethods.DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    private void Paint()
+    {
+        var opacity = Math.Clamp(_settings?.OverlayOpacityPercent ?? 100, 10, 100);
+        var paint = (_size, _color, opacity);
+        if (_painted == paint || _hwnd == 0) return;
+        var pixels = OverlayCircle.Render(_size, _color.R, _color.G, _color.B, _color.A, opacity);
+        var dc = CreateCompatibleDC(0);
+        if (dc == 0) throw new Win32Exception();
+        var info = new BitmapInfo { Size = 40, Width = _size, Height = -_size, Planes = 1, BitCount = 32 };
+        var bitmap = CreateDIBSection(dc, ref info, 0, out var bits, 0, 0);
+        if (bitmap == 0) { DeleteDC(dc); throw new Win32Exception(); }
+        var previous = SelectObject(dc, bitmap);
+        try
         {
-            EndResize();
-            return nint.Zero;
+            Marshal.Copy(pixels, 0, bits, pixels.Length);
+            NativeMethods.GetWindowRect(_hwnd, out var r);
+            var destination = new NativeMethods.Point { X = r.Left, Y = r.Top };
+            var source = new NativeMethods.Point();
+            var size = new NativeMethods.Point { X = _size, Y = _size };
+            var blend = new Blend { SourceConstantAlpha = 255, AlphaFormat = 1 };
+            if (!UpdateLayeredWindow(_hwnd, 0, ref destination, ref size, dc, ref source, 0, ref blend, 2))
+                throw new Win32Exception();
+            _painted = paint;
         }
-        var result = _previousWndProc != nint.Zero
-            ? NativeMethods.CallWindowProc(_previousWndProc, hwnd, message, wParam, lParam)
-            : NativeMethods.DefWindowProc(hwnd, message, wParam, lParam);
-        if (message == NativeMethods.WmSize)
-            ApplyCircleRegion(hwnd);
-        if (message == NativeMethods.WmNcDestroy)
-        {
-            _subclassInstalled = false;
-            _previousWndProc = nint.Zero;
-            _wndProcDelegate = null;
-        }
-        return result;
+        finally { SelectObject(dc, previous); NativeMethods.DeleteObject(bitmap); DeleteDC(dc); }
     }
-
-    private void RemoveWndProcSubclass()
-    {
-        if (!_subclassInstalled) return;
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd != nint.Zero && _previousWndProc != nint.Zero)
-        {
-            NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GwlpWndProc, _previousWndProc);
-        }
-
-        _subclassInstalled = false;
-        _previousWndProc = nint.Zero;
-        // The delegate must stay rooted until the native proc has been
-        // restored; only then is it safe to release the managed reference.
-        _wndProcDelegate = null;
-    }
-
-    private void OverlayWindow_Closed(object sender, WindowEventArgs args) => RemoveWndProcSubclass();
-
-    private void Surface_PointerPressed(object sender, PointerRoutedEventArgs args)
-    {
-        if (IsLocked) return;
-        var point = args.GetCurrentPoint(_surface);
-        if (!point.Properties.IsLeftButtonPressed) return;
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (hwnd == nint.Zero) return;
-
-        if (!NativeMethods.GetCursorPos(out var cursor))
-            return;
-        var hitTest = GetUnlockedHitTest(hwnd, cursor.X, cursor.Y).ToInt32();
-        if (hitTest == NativeMethods.HtClient)
-        {
-            return;
-        }
-
-        if (IsResizeHitTest(hitTest))
-        {
-            BeginResize(hitTest, cursor.X, cursor.Y, hwnd);
-            args.Handled = true;
-            return;
-        }
-
-        // WinUI may capture the pointer before the borderless HWND enters the
-        // native caption move path. Release that capture and ask the window
-        // manager to perform the ordinary caption drag; no custom move loop
-        // runs in our subclass.
-        args.Handled = true;
-        NativeMethods.ReleaseCapture();
-        NativeMethods.SendMessage(
-            hwnd,
-            NativeMethods.WmNcLButtonDown,
-            new nint(hitTest),
-            nint.Zero);
-    }
-
-    private void Surface_PointerMoved(object sender, PointerRoutedEventArgs args)
-    {
-        if (!_isResizing || IsLocked) return;
-        if (!NativeMethods.GetCursorPos(out var cursor)) return;
-
-        ResizeFromCursor(cursor);
-        args.Handled = true;
-    }
-
-    private void BeginResize(int hitTest, int cursorX, int cursorY, nint hwnd)
-    {
-        if (_isResizing) return;
-        _isResizing = true;
-        _resizeHitTest = hitTest;
-        _resizeStartCursor = new NativeMethods.Point { X = cursorX, Y = cursorY };
-        _resizeStartPosition = AppWindow.Position;
-        _resizeStartSize = AppWindow.Size;
-        NativeMethods.SetCapture(hwnd);
-    }
-
-    private void ResizeFromCursor(NativeMethods.Point cursor)
-    {
-        if (!_isResizing || IsLocked) return;
-
-        var deltaX = cursor.X - _resizeStartCursor.X;
-        var deltaY = cursor.Y - _resizeStartCursor.Y;
-        var minSize = (int)Math.Round(BaseWindowDiameter * 0.5);
-        var maxSize = BaseWindowDiameter * 3;
-        var startSize = Math.Max(1, Math.Min(_resizeStartSize.Width, _resizeStartSize.Height));
-        var sizeDelta = GetSquareResizeDelta(_resizeHitTest, deltaX, deltaY);
-        var size = Math.Clamp(startSize + sizeDelta, minSize, maxSize);
-        var x = _resizeStartPosition.X;
-        var y = _resizeStartPosition.Y;
-        if (_resizeHitTest is NativeMethods.HtLeft or NativeMethods.HtTopLeft or NativeMethods.HtBottomLeft)
-            x = _resizeStartPosition.X + _resizeStartSize.Width - size;
-        if (_resizeHitTest is NativeMethods.HtTop or NativeMethods.HtTopLeft or NativeMethods.HtTopRight)
-            y = _resizeStartPosition.Y + _resizeStartSize.Height - size;
-
-        AppWindow.MoveAndResize(new RectInt32(x, y, size, size));
-    }
-
-    private static int GetSquareResizeDelta(int hitTest, int deltaX, int deltaY)
-    {
-        var horizontalDominant = Math.Abs(deltaX) >= Math.Abs(deltaY);
-        return hitTest switch
-        {
-            NativeMethods.HtLeft => -deltaX,
-            NativeMethods.HtRight => deltaX,
-            NativeMethods.HtTop => -deltaY,
-            NativeMethods.HtBottom => deltaY,
-            NativeMethods.HtTopLeft => horizontalDominant ? -deltaX : -deltaY,
-            NativeMethods.HtTopRight => horizontalDominant ? deltaX : -deltaY,
-            NativeMethods.HtBottomLeft => horizontalDominant ? -deltaX : deltaY,
-            NativeMethods.HtBottomRight => horizontalDominant ? deltaX : deltaY,
-            _ => 0
-        };
-    }
-
-    private void Surface_PointerReleased(object sender, PointerRoutedEventArgs args)
-    {
-        if (!_isResizing) return;
-        EndResize();
-        args.Handled = true;
-    }
-
-    private void Surface_PointerCanceled(object sender, PointerRoutedEventArgs args)
-    {
-        if (!_isResizing) return;
-        EndResize();
-        args.Handled = true;
-    }
-
-    private void EndResize()
-    {
-        if (!_isResizing) return;
-        _isResizing = false;
-        NativeMethods.ReleaseCapture();
-    }
-
-    private static bool IsResizeHitTest(int hitTest) => hitTest is
-        NativeMethods.HtLeft or NativeMethods.HtRight
-        or NativeMethods.HtTop or NativeMethods.HtTopLeft or NativeMethods.HtTopRight
-        or NativeMethods.HtBottom or NativeMethods.HtBottomLeft or NativeMethods.HtBottomRight;
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _surface.PointerPressed -= Surface_PointerPressed;
-        _surface.PointerMoved -= Surface_PointerMoved;
-        _surface.PointerReleased -= Surface_PointerReleased;
-        _surface.PointerCanceled -= Surface_PointerCanceled;
-        AppWindow.Changed -= AppWindow_Changed;
-        Closed -= OverlayWindow_Closed;
-        RemoveWndProcSubclass();
-        AppWindow.Hide();
-        Close();
+        if (_hwnd == 0) return;
+        NativeMethods.DestroyWindow(_hwnd);
+        _hwnd = 0;
+        UnregisterClass(_className, _instance);
+        GC.KeepAlive(_windowProc);
     }
+    [StructLayout(LayoutKind.Sequential)] private struct BitmapInfo
+    {
+        public uint Size;
+        public int Width, Height;
+        public ushort Planes, BitCount;
+        public uint Compression, SizeImage;
+        public int XPelsPerMeter, YPelsPerMeter;
+        public uint ClrUsed, ClrImportant;
+    }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] private struct Blend { public byte Op, Flags, SourceConstantAlpha, AlphaFormat; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool UnregisterClass(string name, nint instance);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SetWindowText(nint hwnd, string text);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(nint hwnd, nint dstDc, ref NativeMethods.Point dst, ref NativeMethods.Point size, nint srcDc, ref NativeMethods.Point src, uint key, ref Blend blend, uint flags);
+    [DllImport("gdi32.dll", SetLastError = true)] private static extern nint CreateCompatibleDC(nint dc);
+    [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint dc);
+    [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint obj);
+    [DllImport("gdi32.dll", SetLastError = true)] private static extern nint CreateDIBSection(nint dc, ref BitmapInfo info, uint usage, out nint bits, nint section, uint offset);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

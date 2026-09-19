@@ -22,6 +22,8 @@ if ($cmakeCandidates.Count -eq 0) { throw "CMake was not found." }
 $cmake = $cmakeCandidates[0]
 
 $env:CMAKE_GENERATOR_PLATFORM = $null
+& $cmake -S $engineDirectory -B $engineBuild -G "Visual Studio 17 2022" -A $Architecture
+if ($LASTEXITCODE -ne 0) { throw "Native configuration failed." }
 & $cmake --build $engineBuild --config Release --target UnifiedAudioEngineHost UnifiedAudioEngineTests
 if ($LASTEXITCODE -ne 0) { throw "Native Release build failed." }
 
