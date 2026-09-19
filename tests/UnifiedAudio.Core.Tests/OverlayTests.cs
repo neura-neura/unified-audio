@@ -39,6 +39,20 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void SuppressedOutputStaysIdleAndActivityEndsWhenFiltersClose()
+    {
+        var activity = new SpeechActivityIndicator();
+        // RNNoise/gates can produce silence even with a loud physical input.
+        Assert.False(activity.Update(0, -40, false, true, 1000));
+        Assert.False(activity.Update(0.001f, -40, false, true, 1100));
+        Assert.True(activity.Update(0.02f, -40, false, true, 1200));
+        Assert.False(activity.Update(0, -40, false, true, 1700));
+        // Muting or stopping clears activity immediately, including its hold.
+        Assert.False(activity.Update(0.5f, -40, true, true, 1800));
+        Assert.False(activity.Update(0, -40, false, true, 1850));
+    }
+
+    [Fact]
     public void ActivityUsesThresholdAndHoldsThroughShortSpeechPauses()
     {
         var activity = new SpeechActivityIndicator();

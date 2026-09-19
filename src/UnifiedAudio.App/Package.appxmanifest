@@ -11,7 +11,7 @@
   <Identity
     Name="UnifiedAudio.Desktop"
     Publisher="CN=UnifiedAudio"
-    Version="0.1.4.0" />
+    Version="0.1.5.0" />
 
   <mp:PhoneIdentity
     PhoneProductId="FAB7D87C-FEA3-4101-8321-50FA9F5EF795"

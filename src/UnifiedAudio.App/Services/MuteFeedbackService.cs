@@ -146,8 +146,9 @@ public sealed class MuteFeedbackService : IDisposable
     private void UpdateOverlay(EngineSnapshot snapshot)
     {
         if (_overlay is null) return;
-        // Indicate microphone activity before RNNoise/gates can suppress it.
-        var speaking = _activity.Update(snapshot.InputPeak, _settings.OverlayActivityThresholdDb,
+        // Reflect the signal actually sent to the final endpoint, after the VST
+        // chain, voice mute, mixer routing and gains.
+        var speaking = _activity.Update(snapshot.OutputPeak, _settings.OverlayActivityThresholdDb,
             snapshot.MutedRequested, snapshot.Running, Environment.TickCount64);
         _overlay.UpdateState(snapshot.MutedRequested, speaking, snapshot.Running);
         var visibleForState = _settings.OverlayVisibility switch
